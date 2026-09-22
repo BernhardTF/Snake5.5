@@ -1,8 +1,13 @@
-// Dev harness: ?dev=render&biome=erg&skin=coral&w=28&h=18
+// Dev harness:
+//   ?dev=render&biome=erg&skin=coral&w=28&h=18&q=high&ff=600   – renderer with scripted snake
+//   ?dev=audio                                                – audio test bench (audio agent)
+//   ?dev=ui&screen=title                                      – UI screens with mock host (ui agent)
 import { FakeWorld } from './fakeFrame';
 import type { BiomeId, SkinId } from '../types';
 
 export async function runDev(kind: string, params: URLSearchParams) {
+  if (kind === 'audio') return (await import('./audioDev')).runAudioDev(params);
+  if (kind === 'ui') return (await import('./uiDev')).runUiDev(params);
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const { GameRenderer } = await import('../render/GameRenderer');
   const r = new GameRenderer(canvas);
