@@ -33,7 +33,7 @@ Pillars:
 - Orthographic, **top-down**, framed by a border that fits the biome's culture (wood, cedar,
   bamboo, basalt or woven textile).
 - The board fills the screen. Its short side is 18 cells and its long side scales with the aspect
-  ratio (clamped to 18–34). The layout is chosen when a run starts, so portrait and landscape both
+  ratio (clamped to 18–38). The layout is chosen when a run starts, so portrait and landscape both
   work.
 - A subtle camera shake on death and big combos (can be turned off with *Reduced motion*).
 - Tilt-shift depth-of-field blur at the screen edges gives a miniature, diorama feel.
@@ -56,14 +56,14 @@ undulation is applied on top and never affects collision.
 | **Arcade** | Power-ups, golden food, moving hazards, faster speed curve, big combos. | Yes |
 | **Zen** | No death. Walls wrap and you pass through yourself. No score pressure; only "pattern" and length are tracked. Ambient music only. | None |
 | **Time Attack** | 120 seconds, maximise score. Extra food on the board, and each golden food adds +5 s. | Walls/self cost −10 s and a respawn |
-| **Daily Seed** | Arcade rules with a board seeded by the date (same for everyone that day). One personal best is stored per day. | Yes |
+| **Daily Seed** | Arcade rules on a fixed 22×22 board seeded by the UTC date (same for everyone that day). One personal best is stored per day. | Yes |
 
 ### Scoring
 
 - Food: `base × combo`. Base values: normal 10, golden 50.
 - **Combo**: eating again within the combo window (4 s, shown as a ring on the HUD) raises the
   multiplier ×1 → ×8. The window shrinks slightly as the combo grows.
-- **Near miss**: passing within 0.6 cells of a wall, obstacle or your own body at speed gives +5 ×
+- **Near miss**: passing within 0.6 cells of an obstacle or your own body (walls are excluded — riding the edge would farm points) at speed gives +5 ×
   combo, with a soft chime. Each obstacle or body segment can trigger it at most once per second.
 - **Length milestones** at every 10 segments give a bonus.
 - **Pattern score** (all modes, the main score in Zen): the fraction of the board your trail has

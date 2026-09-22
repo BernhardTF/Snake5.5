@@ -35,7 +35,7 @@ export class Attract {
       if (d !== null && d !== s.dir) this.sim.inputDir(d);
     }
     // keep the demo snake a pleasant length
-    if (this.sim.lengthCells > 26) this.sim.lengthCells = 26;
+    this.sim.capLength(26);
     this.sim.update(dt);
   }
 

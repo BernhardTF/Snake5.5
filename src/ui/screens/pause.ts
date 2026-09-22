@@ -1,3 +1,4 @@
+import { runtime } from '../../core/runtime';
 import { h } from '../dom';
 import { btn } from '../widgets';
 import type { Screen, ScreenCtx } from '../ctx';
@@ -15,7 +16,7 @@ export function buildPause(ctx: ScreenCtx): Screen {
     h(
       'div',
       { class: 'panel pause-panel stagger', role: 'dialog', 'aria-label': 'Paused' },
-      h('div', { class: 'kicker', style: { '--i': '0' } }, `${MODE_BY_ID[s.lastMode]?.name ?? ''} · ${BIOME_BY_ID[s.lastBiome]?.name ?? ''}`),
+      h('div', { class: 'kicker', style: { '--i': '0' } }, `${MODE_BY_ID[s.lastMode]?.name ?? ''} · ${BIOME_BY_ID[runtime.runBiome ?? s.lastBiome]?.name ?? ''}`),
       h('h1', { class: 'screen-title pause-title', style: { '--i': '0' } }, 'Paused'),
       h(
         'div',

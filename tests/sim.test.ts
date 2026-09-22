@@ -148,3 +148,37 @@ describe('progression', () => {
     for (let i = 0; i < 10; i++) expect(a.next()).toBe(b.next());
   });
 });
+
+describe('review regressions', () => {
+  it('grid magnet food gets eaten instead of hiding under the head', () => {
+    const sim = new Sim(cfg('arcade'));
+    (sim as any).obstacles = [];
+    (sim as any).obstacleCells.fill(0);
+    sim.foods.length = 0;
+    const s = sim.debugState();
+    (sim as any).foods.push({ id: 99, kind: 'normal', cx: s.cellX + 4, cy: s.cellY + 1, x: s.cellX + 4.5, y: s.cellY + 1.5, tx: s.cellX + 4.5, ty: s.cellY + 1.5, age: 0, ttl: Infinity });
+    sim.effects.magnet = 8;
+    run(sim, 1.5);
+    expect(sim.stats.foodEaten).toBeGreaterThanOrEqual(1);
+  });
+
+  it('capLength keeps occupancy consistent', () => {
+    const sim = new Sim(cfg('zen'));
+    sim.lengthCells = 40; (sim as any).grow = 36;
+    run(sim, 3);
+    sim.capLength(10);
+    const st = sim.debugState();
+    const occSum = Array.from(st.occ as Uint16Array).reduce((a, b) => a + b, 0);
+    expect(occSum).toBe(st.cells.length);
+    expect(st.cells.length + (sim as any).grow).toBe(10);
+  });
+
+  it('long zen run stays fast and bounded', () => {
+    const sim = new Sim(cfg('zen'));
+    sim.lengthCells = 200; (sim as any).grow = 196;
+    const t0 = performance.now();
+    run(sim, 120);
+    expect(performance.now() - t0).toBeLessThan(4000);
+    expect((sim as any).px.length).toBeLessThan(8000);
+  });
+});

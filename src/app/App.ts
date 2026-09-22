@@ -10,6 +10,7 @@ import { Sim, type Dir } from '../game/Sim';
 import { Attract } from './Attract';
 import { store, bestKey, todayKey, type Settings } from '../core/storage';
 import { hashString } from '../core/rng';
+import { runtime } from '../core/runtime';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { levelFromXp, levelProgress, unlocksBetween } from '../game/progression';
 import { SKINS } from '../skins/skins';
@@ -49,6 +50,9 @@ export class App implements UIHost {
   private hudPattern = 0;
   private patternTimer = 0;
   private pendingEvents: GameEvent[] = [];
+  private cdSerial = 0;
+  private toastTimers: number[] = [];
+  private lastRenderKey = '';
 
   constructor() {
     const s = store.settings;
@@ -56,7 +60,7 @@ export class App implements UIHost {
     this.previewSkinId = s.skin;
     this.autoQuality = IS_TOUCH ? 'medium' : 'high';
     this.renderer = new GameRenderer(this.canvas);
-    this.renderer.setOptions(this.renderOptions());
+    this.applyRenderOptions(true);
     this.computeBoard();
     this.renderer.setBiome(this.biome);
     this.renderer.setBoard(this.boardW, this.boardH);
@@ -119,13 +123,21 @@ export class App implements UIHost {
     };
   }
 
+  private applyRenderOptions(force = false) {
+    const o = this.renderOptions();
+    const key = JSON.stringify(o);
+    if (!force && key === this.lastRenderKey) return;
+    this.lastRenderKey = key;
+    this.renderer.setOptions(o);
+  }
+
   private applyAudioSettings() {
     const s = store.settings;
     this.audio.setVolumes(s.masterVolume, s.musicVolume, s.sfxVolume, s.muted);
   }
 
   settingsChanged(_s: Settings) {
-    this.renderer.setOptions(this.renderOptions());
+    this.applyRenderOptions();
     this.applyAudioSettings();
     this.updateTouchControls();
     if (!store.settings.showFps) this.ui.setFps(null);
@@ -181,7 +193,13 @@ export class App implements UIHost {
     this.previewSkinId = id;
   }
 
+  private clearToastTimers() {
+    for (const t of this.toastTimers) clearTimeout(t);
+    this.toastTimers = [];
+  }
+
   startGame(req: StartRequest) {
+    this.clearToastTimers();
     this.lastReq = { ...req };
     store.saveSettings({ lastMode: req.mode, lastMovement: req.movement, lastBiome: req.biome, skin: req.skin });
     this.computeBoard();
@@ -197,13 +215,14 @@ export class App implements UIHost {
     };
     // daily seed boards use a fixed size so everybody gets the same layout
     if (daily) {
-      cfg.boardW = innerWidth >= innerHeight ? 30 : 18;
-      cfg.boardH = innerWidth >= innerHeight ? 18 : 30;
+      cfg.boardW = 22;
+      cfg.boardH = 22;
     }
     const best = daily
       ? store.profile.daily[todayKey()] ?? 0
       : store.profile.bests[bestKey(cfg.mode, cfg.biome, cfg.movement)] ?? 0;
     this.sim = new Sim(cfg, best);
+    runtime.runBiome = cfg.biome;
     this.previewSkinId = req.skin;
     if (cfg.biome !== this.biome) {
       this.biome = cfg.biome;
@@ -224,10 +243,17 @@ export class App implements UIHost {
     this.ui.show('hud');
     this.ui.updateHud(this.sim.hud(0));
     this.updateTouchControls();
+    this.runCountdown();
+  }
+
+  /** Runs the 3-2-1 overlay; only the latest countdown may start play. */
+  private runCountdown() {
+    const serial = ++this.cdSerial;
     const sim = this.sim;
     this.ui.countdown().then(() => {
-      if (this.sim === sim && this.state === 'countdown') {
+      if (serial === this.cdSerial && this.sim === sim && this.state === 'countdown') {
         this.state = 'playing';
+        this.input.reset();
         this.input.enabled = true;
       }
     });
@@ -240,6 +266,7 @@ export class App implements UIHost {
 
   pause() {
     if (this.state !== 'playing' && this.state !== 'countdown') return;
+    if (this.sim && !this.sim.alive) return; // death animation: let the run finish
     this.state = 'paused';
     this.input.enabled = false;
     this.audio.setScene('paused');
@@ -250,18 +277,11 @@ export class App implements UIHost {
 
   resume() {
     if (this.state !== 'paused' || !this.sim) return;
+    this.state = 'countdown';
     this.ui.show('hud');
     this.updateTouchControls();
     this.audio.setScene('game');
-    this.state = 'countdown';
-    const sim = this.sim;
-    this.ui.countdown().then(() => {
-      if (this.sim === sim && this.state === 'countdown') {
-        this.state = 'playing';
-        this.input.enabled = true;
-        this.input.reset();
-      }
-    });
+    this.runCountdown();
   }
 
   restart() {
@@ -278,6 +298,7 @@ export class App implements UIHost {
   }
 
   private toMenu() {
+    this.clearToastTimers();
     this.state = 'menu';
     this.sim = null;
     this.input.enabled = false;
@@ -302,8 +323,8 @@ export class App implements UIHost {
         await navigator.share({ files: [file], title: 'My Serpent Sands garden' });
         return;
       }
-    } catch {
-      /* fall back to download */
+    } catch (e) {
+      if ((e as DOMException)?.name === 'AbortError') return; // user cancelled the share sheet
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -409,17 +430,17 @@ export class App implements UIHost {
     let delay = 900;
     for (const id of earned) {
       const a = ACHIEVEMENTS.find((x) => x.id === id)!;
-      setTimeout(() => {
+      this.toastTimers.push(window.setTimeout(() => {
         this.ui.toast(a.name, a.description, a.icon);
         this.audio.ui('achievement');
-      }, delay);
+      }, delay));
       delay += 1200;
     }
     for (const u of unlocks) {
-      setTimeout(() => {
+      this.toastTimers.push(window.setTimeout(() => {
         this.ui.toast(u, undefined, '✦');
         this.audio.ui('unlock');
-      }, delay);
+      }, delay));
       delay += 1200;
     }
   }
@@ -477,7 +498,7 @@ export class App implements UIHost {
 
   private autoTune(dt: number) {
     if (store.settings.quality !== 'auto') return;
-    const allowed = this.state === 'menu' || (this.state === 'playing' && this.runTime < 5) || this.state === 'countdown';
+    const allowed = this.state === 'menu' || ((this.state === 'playing' || this.state === 'countdown') && this.runTime < 5);
     if (!allowed) return;
     const ms = this.renderer.frameMs;
     if (ms > 20) { this.slowFor += dt; this.fastFor = 0; }
@@ -487,11 +508,11 @@ export class App implements UIHost {
     if (this.slowFor > 3 && i > 0) {
       this.autoQuality = QUALITY_ORDER[i - 1];
       this.slowFor = 0;
-      this.renderer.setOptions(this.renderOptions());
+      this.applyRenderOptions();
     } else if (this.fastFor > 10 && i < 2) {
       this.autoQuality = QUALITY_ORDER[i + 1];
       this.fastFor = 0;
-      this.renderer.setOptions(this.renderOptions());
+      this.applyRenderOptions();
     }
   }
 

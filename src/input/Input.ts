@@ -28,6 +28,7 @@ export class Input {
   private padPrev: boolean[] = [];
   private padStickDir: Dir | null = null;
   private padActive = false;
+  private padSteering = false;
   /** Set true when the last gameplay input came from touch (UI hints etc). */
   lastWasTouch = false;
 
@@ -39,7 +40,11 @@ export class Input {
   ) {
     addEventListener('keydown', this.onKeyDown);
     addEventListener('keyup', this.onKeyUp);
-    addEventListener('blur', () => this.keysDown.clear());
+    addEventListener('blur', () => {
+      this.keysDown.clear();
+      this.halves.left = this.halves.right = false;
+      if (this.movement === 'glide') this.sink.steer(0);
+    });
     canvas.addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove, { passive: false });
     addEventListener('pointerup', this.onPointerUp);
@@ -189,7 +194,13 @@ export class Input {
         // shoulder buttons / triggers steer
         const lt = (pad.buttons[4]?.pressed ? 1 : 0) + (pad.buttons[6]?.value ?? 0);
         const rt = (pad.buttons[5]?.pressed ? 1 : 0) + (pad.buttons[7]?.value ?? 0);
-        if (lt > 0.1 || rt > 0.1) this.sink.steer(Math.max(-1, Math.min(1, rt - lt)));
+        if (lt > 0.1 || rt > 0.1) {
+          this.sink.steer(Math.max(-1, Math.min(1, rt - lt)));
+          this.padSteering = true;
+        } else if (this.padSteering) {
+          this.padSteering = false;
+          this.sink.steer(0);
+        }
       }
     }
     this.padPrev = pressed;

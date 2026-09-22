@@ -137,10 +137,59 @@ function write(key: string, value: unknown) {
 
 type Listener = () => void;
 
+const BIOME_IDS = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
+const SKIN_IDS = ['obsidian', 'coral', 'emerald', 'albino', 'krait', 'rainbow', 'viper', 'ember'];
+const MODE_IDS = ['classic', 'arcade', 'zen', 'timeattack', 'daily'];
+
+/** Replace any field whose type/enum doesn't match the defaults (corrupt or old saves). */
+function sanitizeSettings(s: Settings): Settings {
+  const d: any = DEFAULT_SETTINGS;
+  const out: any = { ...s };
+  for (const k of Object.keys(d)) if (typeof out[k] !== typeof d[k]) out[k] = d[k];
+  const oneOf = (k: keyof Settings, allowed: string[]) => { if (!allowed.includes(out[k])) out[k] = d[k]; };
+  oneOf('quality', ['auto', 'low', 'medium', 'high', 'ultra']);
+  oneOf('gridTouch', ['swipe', 'dpad']);
+  oneOf('glideTouch', ['drag', 'halves']);
+  oneOf('lastMode', MODE_IDS);
+  oneOf('lastMovement', ['grid', 'glide']);
+  oneOf('lastBiome', BIOME_IDS);
+  oneOf('skin', SKIN_IDS);
+  for (const k of ['renderScale', 'masterVolume', 'musicVolume', 'sfxVolume', 'swipeSensitivity']) {
+    if (!Number.isFinite(out[k])) out[k] = d[k];
+  }
+  out.renderScale = Math.min(1, Math.max(0.5, out.renderScale));
+  return out;
+}
+
+function sanitizeProfile(p: Profile): Profile {
+  const out: any = { ...p };
+  if (!Number.isFinite(out.xp) || out.xp < 0) out.xp = 0;
+  for (const k of ['bests', 'daily', 'achievements']) if (!out[k] || typeof out[k] !== 'object') out[k] = {};
+  const st: any = out.stats;
+  for (const k of Object.keys(DEFAULT_PROFILE.stats)) {
+    const dv: any = (DEFAULT_PROFILE.stats as any)[k];
+    if (typeof st[k] !== typeof dv || (Array.isArray(dv) && !Array.isArray(st[k]))) st[k] = structuredClone(dv);
+  }
+  st.biomesPlayed = st.biomesPlayed.filter((b: string) => BIOME_IDS.includes(b));
+  return out;
+}
+
 class Store {
-  settings: Settings = read(SETTINGS_KEY, DEFAULT_SETTINGS);
-  profile: Profile = read(PROFILE_KEY, DEFAULT_PROFILE);
+  settings: Settings = sanitizeSettings(read(SETTINGS_KEY, DEFAULT_SETTINGS));
+  profile: Profile = sanitizeProfile(read(PROFILE_KEY, DEFAULT_PROFILE));
   private listeners = new Set<Listener>();
+
+  constructor() {
+    // keep several open tabs from overwriting each other's progress
+    if (typeof addEventListener !== 'undefined') {
+      addEventListener('storage', (e: StorageEvent) => {
+        if (e.key === PROFILE_KEY) {
+          this.profile = sanitizeProfile(read(PROFILE_KEY, DEFAULT_PROFILE));
+          this.emit();
+        }
+      });
+    }
+  }
 
   saveSettings(patch?: Partial<Settings>) {
     if (patch) Object.assign(this.settings, patch);
@@ -174,9 +223,10 @@ export function bestKey(mode: GameModeId, biome: BiomeId, movement: MovementMode
   return `${mode}|${biome}|${movement}`;
 }
 
+/** UTC date, so the Daily Seed is the same board worldwide. */
 export function todayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }

@@ -9,7 +9,7 @@ import { MODES, type ModeRules } from './modes';
 export const STEP = 1 / 120;
 const SPACING = 0.125;
 const RADIUS = 0.34;
-const MAX_POINTS = 1400;
+const MAX_POINTS = 4000;
 const START_LEN = 4;
 const NECK = 1.6; // world units of body right behind the head ignored for self collision (glide)
 const DIRS: [number, number][] = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // up right down left
@@ -350,7 +350,7 @@ export class Sim {
       b.s += dt * 2.2;
       b.amount *= 1 - dt * 0.15;
     }
-    this.bulges = this.bulges.filter((b) => b.s < this.visLen);
+    for (let i = this.bulges.length - 1; i >= 0; i--) if (this.bulges[i].s >= this.visLen) this.bulges.splice(i, 1);
 
     // trim path history
     this.trimPath();
@@ -371,8 +371,10 @@ export class Sim {
     this.py.push(y);
   }
 
+  private trimCounter = 0;
   private trimPath() {
-    if (this.px.length < 4000) return;
+    if (++this.trimCounter < 30 || this.px.length < 600) return;
+    this.trimCounter = 0;
     // keep enough for the body
     let d = 0;
     for (let i = this.px.length - 1; i > 0; i--) {
@@ -380,7 +382,7 @@ export class Sim {
       if (seg < 1.5) d += seg;
       if (d > this.visLen + 4) {
         const cut = i - 1;
-        if (cut > 0) {
+        if (cut > 200) {
           this.px.splice(0, cut);
           this.py.splice(0, cut);
           this.legHistLen = Math.max(0, this.legHistLen - cut);
@@ -803,17 +805,16 @@ export class Sim {
             const s = Math.min(d, 3.5 * wdt);
             f.x += (dx / d) * s;
             f.y += (dy / d) * s;
-          } else if (Math.abs(f.x - f.tx) < 0.02 && Math.abs(f.y - f.ty) < 0.02) {
-            // hop one cell towards the head
-            const sx = Math.abs(dx) > Math.abs(dy) ? Math.sign(dx) : 0;
-            const sy = sx === 0 ? Math.sign(dy) : 0;
-            const nx = f.cx + sx, ny = f.cy + sy;
-            if (this.cellFree(nx, ny) || (Math.floor(this.hx) === nx && Math.floor(this.hy) === ny)) {
-              if (this.obstacleCells[ny * this.W + nx] === 0 && nx >= 0 && ny >= 0 && nx < this.W && ny < this.H) {
-                f.cx = nx;
-                f.cy = ny;
-                f.tx = nx + 0.5;
-                f.ty = ny + 0.5;
+          } else {
+            // grid: food flies into the cell just ahead of the head (not yet entered) and is eaten there
+            const ax = Math.floor(this.hx + DIRS[this.dir][0]), ay = Math.floor(this.hy + DIRS[this.dir][1]);
+            if ((ax !== f.cx || ay !== f.cy) && Math.abs(ax - f.cx) + Math.abs(ay - f.cy) <= 5) {
+              const taken = this.foods.some((o) => o !== f && o.cx === ax && o.cy === ay);
+              if (!taken && this.cellFree(ax, ay)) {
+                f.cx = ax;
+                f.cy = ay;
+                f.tx = ax + 0.5;
+                f.ty = ay + 0.5;
               }
             }
           }
@@ -825,7 +826,9 @@ export class Sim {
         f.y += (f.ty - f.y) * k;
       }
     }
-    while (this.foods.filter((f) => f.kind === 'normal').length < this.rules.foodCount) {
+    let normals = 0;
+    for (const f of this.foods) if (f.kind === 'normal') normals++;
+    for (; normals < this.rules.foodCount; normals++) {
       const before = this.foods.length;
       this.spawnFood('normal');
       if (this.foods.length === before) break;
@@ -1053,6 +1056,18 @@ export class Sim {
       mode: this.cfg.mode,
       pattern,
     };
+  }
+
+  /** Clamp the logical length (attract mode), trimming pending growth and grid cells. */
+  capLength(n: number) {
+    if (this.lengthCells <= n) return;
+    const excess = this.lengthCells - n;
+    this.lengthCells = n;
+    let rem = excess;
+    const g = Math.min(this.grow, rem);
+    this.grow -= g;
+    rem -= g;
+    while (rem-- > 0 && this.cells.length > 1) this.occ[this.cells.pop()!]--;
   }
 
   /** For the attract-mode AI and tests. */
