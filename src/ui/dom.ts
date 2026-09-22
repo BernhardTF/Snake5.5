@@ -79,11 +79,11 @@ export function fmtHours(sec: number) {
 
 export function fmtDate(ms: number | Date) {
   const d = typeof ms === 'number' ? new Date(ms) : ms;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function fmtDayShort(d = new Date()) {
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));

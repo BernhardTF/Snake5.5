@@ -8,7 +8,7 @@ interface BedLayer {
   f: number;
   q: number;
   /** Filter frequency LFOs [rate Hz, depth Hz]. */
-  fl?: [number, number][];
+  fl?: [number, number, number?][];
   gain: number;
   /** Gain LFOs [rate Hz, depth (fraction of gain)]; start offset (s) shifts phase. */
   gl?: [number, number, number?][];
@@ -17,8 +17,8 @@ interface BedLayer {
 
 const BEDS: Record<BiomeId, BedLayer[]> = {
   karesansui: [
-    { color: 'pink', type: 'bandpass', f: 520, q: 0.6, fl: [[0.07, 230], [0.023, 120]], gain: 0.07, gl: [[0.05, 0.45], [0.13, 0.2]] },
-    { color: 'white', type: 'highpass', f: 3800, q: 0.5, gain: 0.006, gl: [[0.09, 0.8], [0.031, 0.15]], pan: 0.3 },
+    { color: 'pink', type: 'bandpass', f: 520, q: 0.6, fl: [[0.07, 230], [0.023, 120]], gain: 0.11, gl: [[0.05, 0.45], [0.13, 0.2]] },
+    { color: 'white', type: 'highpass', f: 3800, q: 0.5, gain: 0.0025, gl: [[0.09, 0.8], [0.031, 0.15]], pan: 0.3 },
   ],
   erg: [
     { color: 'pink', type: 'lowpass', f: 380, q: 0.7, fl: [[0.045, 160]], gain: 0.1, gl: [[0.041, 0.55], [0.11, 0.25]] },
@@ -27,18 +27,18 @@ const BEDS: Record<BiomeId, BedLayer[]> = {
   ],
   lagoon: [
     // surf swell: cutoff and gain share a slow cycle (~11 s); second layer offset in phase
-    { color: 'brown', type: 'lowpass', f: 650, q: 0.6, fl: [[0.09, 480]], gain: 0.12, gl: [[0.09, 0.75]], pan: -0.2 },
-    { color: 'white', type: 'highpass', f: 2600, q: 0.6, fl: [[0.09, 900, 2.5]], gain: 0.012, gl: [[0.09, 0.9, 2.5]], pan: 0.25 },
+    { color: 'brown', type: 'lowpass', f: 650, q: 0.6, fl: [[0.09, 480]], gain: 0.075, gl: [[0.09, 0.75]], pan: -0.2 },
+    { color: 'white', type: 'highpass', f: 2600, q: 0.6, fl: [[0.09, 900, 2.5]], gain: 0.007, gl: [[0.09, 0.9, 2.5]], pan: 0.25 },
     { color: 'pink', type: 'lowpass', f: 300, q: 0.7, gain: 0.03, gl: [[0.067, 0.5, 5]] },
   ],
   svartsandur: [
     { color: 'pink', type: 'bandpass', f: 360, q: 1.1, fl: [[0.04, 180], [0.017, 90]], gain: 0.07, gl: [[0.035, 0.55], [0.1, 0.2]] },
-    { color: 'brown', type: 'lowpass', f: 75, q: 0.9, gain: 0.25, gl: [[0.05, 0.3]] },
+    { color: 'brown', type: 'lowpass', f: 75, q: 0.9, gain: 0.1, gl: [[0.05, 0.3]] },
     { color: 'white', type: 'bandpass', f: 5200, q: 3, fl: [[0.06, 1200]], gain: 0.004, gl: [[0.05, 0.9]], pan: 0.4 },
   ],
   salar: [
-    { color: 'pink', type: 'bandpass', f: 2300, q: 2.2, fl: [[0.06, 900], [0.019, 400]], gain: 0.022, gl: [[0.045, 0.7], [0.12, 0.2]] },
-    { color: 'pink', type: 'lowpass', f: 260, q: 0.7, gain: 0.035, gl: [[0.03, 0.5]] },
+    { color: 'pink', type: 'bandpass', f: 2300, q: 2.2, fl: [[0.06, 900], [0.019, 400]], gain: 0.035, gl: [[0.045, 0.7], [0.12, 0.2]] },
+    { color: 'pink', type: 'lowpass', f: 260, q: 0.7, gain: 0.05, gl: [[0.03, 0.5]] },
     { color: 'white', type: 'bandpass', f: 7000, q: 4, fl: [[0.08, 1500]], gain: 0.003, gl: [[0.07, 0.9]], pan: -0.4 },
   ],
 };

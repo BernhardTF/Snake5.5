@@ -30,113 +30,88 @@ export function degToSemi(scale: readonly number[], deg: number): number {
   return scale[i] + 12 * oct;
 }
 
+// ------------------------------------------------------------------ chunked generators
+// Heavy buffers are rendered by generators that yield every CHUNK samples, so idle-time jobs
+// never block the main thread for long. `runGen` drains one synchronously when needed now.
+
+export const CHUNK = 4096;
+export function runGen<T>(g: Generator<unknown, T, unknown>): T {
+  for (;;) { const r = g.next(); if (r.done) return r.value; }
+}
+
 // ------------------------------------------------------------------ noise
 
 export type NoiseColor = 'white' | 'pink' | 'brown';
 
-/** Seamlessly loopable stereo noise buffer (crossfaded ends). */
-export function makeNoiseBuffer(ctx: BaseAudioContext, seconds: number, color: NoiseColor, seed: number): AudioBuffer {
-  const sr = ctx.sampleRate;
+/** Seamlessly loopable stereo noise (crossfaded ends). Returns channel data. */
+export function* noiseGen(sr: number, seconds: number, color: NoiseColor, seed: number): Generator<void, Float32Array[], unknown> {
   const len = Math.max(1024, Math.floor(seconds * sr));
   const fade = Math.min(4096, len >> 2);
-  const buf = ctx.createBuffer(2, len, sr);
+  const outs: Float32Array[] = [];
   for (let ch = 0; ch < 2; ch++) {
     const rng = mulberry32(seed * 7919 + ch * 104729 + 1);
     const tmp = new Float32Array(len + fade);
     let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, br = 0;
-    for (let i = 0; i < tmp.length; i++) {
-      const w = rng() * 2 - 1;
-      let v: number;
-      if (color === 'white') v = w * 0.5;
+    for (let i0 = 0; i0 < tmp.length; i0 += CHUNK) {
+      const e = Math.min(tmp.length, i0 + CHUNK);
+      if (color === 'white') for (let i = i0; i < e; i++) tmp[i] = (rng() * 2 - 1) * 0.5;
       else if (color === 'pink') {
-        // Paul Kellet's refined pink filter
-        b0 = 0.99886 * b0 + w * 0.0555179;
-        b1 = 0.99332 * b1 + w * 0.0750759;
-        b2 = 0.969 * b2 + w * 0.153852;
-        b3 = 0.8665 * b3 + w * 0.3104856;
-        b4 = 0.55 * b4 + w * 0.5329522;
-        b5 = -0.7616 * b5 - w * 0.016898;
-        v = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
-        b6 = w * 0.115926;
+        for (let i = i0; i < e; i++) {
+          // Paul Kellet's refined pink filter
+          const w = rng() * 2 - 1;
+          b0 = 0.99886 * b0 + w * 0.0555179;
+          b1 = 0.99332 * b1 + w * 0.0750759;
+          b2 = 0.969 * b2 + w * 0.153852;
+          b3 = 0.8665 * b3 + w * 0.3104856;
+          b4 = 0.55 * b4 + w * 0.5329522;
+          b5 = -0.7616 * b5 - w * 0.016898;
+          tmp[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+          b6 = w * 0.115926;
+        }
       } else {
-        br = (br + 0.02 * w) * 0.995; // leaky integrator
-        v = br * 3.2;
+        for (let i = i0; i < e; i++) { br = (br + 0.02 * (rng() * 2 - 1)) * 0.995; tmp[i] = br * 3.2; }
       }
-      tmp[i] = v;
+      yield;
     }
-    const out = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) out[i] = tmp[i];
-    for (let i = 0; i < fade; i++) {
-      const k = i / fade;
-      out[i] = out[i] * k + tmp[len + i] * (1 - k);
-    }
-    // remove DC
+    const out = tmp.subarray(0, len);
+    for (let i = 0; i < fade; i++) { const k = i / fade; out[i] = out[i] * k + tmp[len + i] * (1 - k); }
     let m = 0;
     for (let i = 0; i < len; i++) m += out[i];
     m /= len;
     for (let i = 0; i < len; i++) out[i] -= m;
+    outs.push(out);
+    yield;
   }
-  return buf;
+  return outs;
 }
 
-/** Sparse impulse "crackle" loop for slither grain texture. */
-export function makeCrackleBuffer(
-  ctx: BaseAudioContext, seconds: number, density: number, grainMs: number, seed: number,
-): AudioBuffer {
-  const sr = ctx.sampleRate;
+/** Sparse impulse "crackle" loop (stereo channel data) for slither grain texture. */
+export function* crackleGen(sr: number, seconds: number, density: number, grainMs: number, seed: number): Generator<void, Float32Array[], unknown> {
   const len = Math.floor(seconds * sr);
-  const buf = ctx.createBuffer(2, len, sr);
   const glen = Math.max(4, Math.floor((grainMs / 1000) * sr));
+  const outs: Float32Array[] = [];
   for (let ch = 0; ch < 2; ch++) {
     const rng = mulberry32(seed * 31 + ch * 977 + 3);
-    const out = buf.getChannelData(ch);
+    const out = new Float32Array(len);
     const count = Math.floor(density * seconds);
+    let work = 0;
     for (let g = 0; g < count; g++) {
       const start = Math.floor(rng() * (len - glen));
       const amp = (0.25 + 0.75 * rng() * rng()) * (rng() < 0.5 ? -1 : 1);
       const l = Math.floor(glen * (0.4 + rng() * 0.9));
-      for (let i = 0; i < l && start + i < len; i++) {
-        const env = Math.exp((-6 * i) / l);
-        out[start + i] += amp * env * (rng() * 2 - 1);
-      }
+      const k = Math.exp(-6 / l);
+      let env = amp;
+      for (let i = 0; i < l && start + i < len; i++) { out[start + i] += env * (rng() * 2 - 1); env *= k; }
+      work += l;
+      if (work > CHUNK) { work = 0; yield; }
     }
     let peak = 0;
-    for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(out[i]));
-    if (peak > 0) for (let i = 0; i < len; i++) out[i] *= 0.8 / peak;
+    for (let i = 0; i < len; i++) { const a = out[i] < 0 ? -out[i] : out[i]; if (a > peak) peak = a; }
+    if (peak > 0) { const k = 0.8 / peak; for (let i = 0; i < len; i++) out[i] *= k; }
+    outs.push(out);
+    yield;
   }
-  return buf;
-}
-
-// ------------------------------------------------------------------ biquad (JS, for pre-rendering)
-
-class JsBiquad {
-  b0 = 1; b1 = 0; b2 = 0; a1 = 0; a2 = 0; x1 = 0; x2 = 0; y1 = 0; y2 = 0;
-  static peaking(sr: number, f: number, q: number, db: number) {
-    const bq = new JsBiquad();
-    const A = Math.pow(10, db / 40);
-    const w = (2 * Math.PI * f) / sr;
-    const al = Math.sin(w) / (2 * q);
-    const cw = Math.cos(w);
-    const a0 = 1 + al / A;
-    bq.b0 = (1 + al * A) / a0; bq.b1 = (-2 * cw) / a0; bq.b2 = (1 - al * A) / a0;
-    bq.a1 = (-2 * cw) / a0; bq.a2 = (1 - al / A) / a0;
-    return bq;
-  }
-  static lowpass(sr: number, f: number, q: number) {
-    const bq = new JsBiquad();
-    const w = (2 * Math.PI * Math.min(f, sr * 0.45)) / sr;
-    const al = Math.sin(w) / (2 * q);
-    const cw = Math.cos(w);
-    const a0 = 1 + al;
-    bq.b0 = (1 - cw) / 2 / a0; bq.b1 = (1 - cw) / a0; bq.b2 = (1 - cw) / 2 / a0;
-    bq.a1 = (-2 * cw) / a0; bq.a2 = (1 - al) / a0;
-    return bq;
-  }
-  run(x: number) {
-    const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
-    this.x2 = this.x1; this.x1 = x; this.y2 = this.y1; this.y1 = y;
-    return y;
-  }
+  return outs;
 }
 
 // ------------------------------------------------------------------ Karplus-Strong
@@ -154,7 +129,7 @@ export interface KsParams {
   buzz?: number;
   /** Max rendered length in seconds. */
   len: number;
-  /** Body resonances [freq, q, dB]. */
+  /** Body resonances [freq, q, dB] (max 3). */
   body?: [number, number, number][];
   /** Final lowpass Hz. */
   lp?: number;
@@ -162,31 +137,42 @@ export interface KsParams {
   cents?: number;
 }
 
-export function renderKS(freq: number, sr: number, p: KsParams, rng: Rng): Float32Array {
+type Coefs = [number, number, number, number, number];
+function peakingCoefs(sr: number, f: number, q: number, db: number): Coefs {
+  const A = Math.pow(10, db / 40);
+  const w = (2 * Math.PI * f) / sr;
+  const al = Math.sin(w) / (2 * q);
+  const cw = Math.cos(w);
+  const a0 = 1 + al / A;
+  return [(1 + al * A) / a0, (-2 * cw) / a0, (1 - al * A) / a0, (-2 * cw) / a0, (1 - al / A) / a0];
+}
+function lowpassCoefs(sr: number, f: number, q: number): Coefs {
+  const w = (2 * Math.PI * Math.min(f, sr * 0.45)) / sr;
+  const al = Math.sin(w) / (2 * q);
+  const cw = Math.cos(w);
+  const a0 = 1 + al;
+  return [(1 - cw) / 2 / a0, (1 - cw) / a0, (1 - cw) / 2 / a0, (-2 * cw) / a0, (1 - al) / a0];
+}
+
+/** Plucked string (Karplus-Strong with fractional-delay tuning, body EQ, buzz). */
+export function* ksGen(freq: number, sr: number, p: KsParams, rng: Rng): Generator<void, Float32Array, unknown> {
   freq *= Math.pow(2, (p.cents ?? 0) / 1200);
   const N = sr / freq;
   const S = clamp(p.damp, 0.02, 0.5);
-  let D = N - S;
+  const D = N - S;
   let L = Math.floor(D);
   let frac = D - L;
   if (frac < 0.15) { L -= 1; frac += 1; }
   L = Math.max(2, L);
   const C = (1 - frac) / (1 + frac);
   const ring = new Float32Array(L);
-  // Excitation: filtered noise with pluck-position comb.
   const a = clamp(p.bright, 0.02, 1);
-  let lp = 0;
+  let lpv = 0;
   const exc = new Float32Array(L);
-  for (let i = 0; i < L; i++) {
-    lp += a * (rng() * 2 - 1 - lp);
-    exc[i] = lp;
-  }
+  for (let i = 0; i < L; i++) { lpv += a * (rng() * 2 - 1 - lpv); exc[i] = lpv; }
   const P = Math.max(1, Math.round(p.pos * L));
   let mean = 0;
-  for (let i = 0; i < L; i++) {
-    ring[i] = exc[i] - 0.9 * exc[(i - P + L) % L];
-    mean += ring[i];
-  }
+  for (let i = 0; i < L; i++) { ring[i] = exc[i] - 0.9 * exc[(i - P + L) % L]; mean += ring[i]; }
   mean /= L;
   for (let i = 0; i < L; i++) ring[i] -= mean;
   const g = Math.pow(10, -3 / (p.t60 * freq));
@@ -194,54 +180,50 @@ export function renderKS(freq: number, sr: number, p: KsParams, rng: Rng): Float
   const out = new Float32Array(len);
   const buzz = p.buzz ?? 0;
   const thr = 0.35;
-  let prev = 0, apX = 0, apY = 0, idx = 0;
-  for (let n = 0; n < len; n++) {
-    const x = ring[idx];
-    const avg = (1 - S) * x + S * prev;
-    prev = x;
-    const y = C * avg + apX - C * apY;
-    apX = avg; apY = y;
-    let v = y * g;
-    if (buzz > 0 && v < -thr) v = -thr + (v + thr) * (1 - buzz);
-    ring[idx] = v;
-    out[n] = x;
-    idx++;
-    if (idx >= L) idx = 0;
-  }
-  // body / tone
-  if (p.body && p.body.length) {
-    const bqs = p.body.map(([f, q, db]) => JsBiquad.peaking(sr, f, q, db));
-    for (let n = 0; n < len; n++) {
-      let v = out[n];
-      for (const b of bqs) v = b.run(v);
-      out[n] = v;
+  // up to 3 body peaking filters + optional lowpass, all inline (flat coefficient array)
+  const bq: Coefs[] = (p.body ?? []).slice(0, 3).map(([f, q, db]) => peakingCoefs(sr, f, q, db));
+  if (p.lp) bq.push(lowpassCoefs(sr, p.lp, 0.7));
+  const nb = bq.length;
+  const st = new Float64Array(nb * 4); // x1 x2 y1 y2 per filter
+  let prev = 0, apX = 0, apY = 0, idx = 0, dcx = 0, dcy = 0;
+  for (let n0 = 0; n0 < len; n0 += CHUNK) {
+    const e = Math.min(len, n0 + CHUNK);
+    for (let n = n0; n < e; n++) {
+      const x = ring[idx];
+      const avg = (1 - S) * x + S * prev;
+      prev = x;
+      const y = C * avg + apX - C * apY;
+      apX = avg; apY = y;
+      let v = y * g;
+      if (buzz > 0 && v < -thr) v = -thr + (v + thr) * (1 - buzz);
+      ring[idx] = v;
+      if (++idx >= L) idx = 0;
+      let s = x;
+      for (let k = 0; k < nb; k++) {
+        const c = bq[k], o = k * 4;
+        const yy = c[0] * s + c[1] * st[o] + c[2] * st[o + 1] - c[3] * st[o + 2] - c[4] * st[o + 3];
+        st[o + 1] = st[o]; st[o] = s; st[o + 3] = st[o + 2]; st[o + 2] = yy;
+        s = yy;
+      }
+      // DC blocker
+      const dy = s - dcx + 0.995 * dcy;
+      dcx = s; dcy = dy;
+      out[n] = dy;
     }
+    yield;
   }
-  if (p.lp) {
-    const b = JsBiquad.lowpass(sr, p.lp, 0.7);
-    for (let n = 0; n < len; n++) out[n] = b.run(out[n]);
-  }
-  // DC blocker
-  let xm = 0, ym = 0;
-  for (let n = 0; n < len; n++) {
-    const x = out[n];
-    const y = x - xm + 0.995 * ym;
-    xm = x; ym = y;
-    out[n] = y;
-  }
-  // soft start (1 ms) and tail fade (60 ms)
   const fi = Math.min(len, Math.floor(sr * 0.001));
   for (let n = 0; n < fi; n++) out[n] *= n / fi;
   const fo = Math.min(len, Math.floor(sr * 0.06));
   for (let n = 0; n < fo; n++) out[len - 1 - n] *= n / fo;
-  // normalise peak
   let peak = 0;
-  for (let n = 0; n < len; n++) peak = Math.max(peak, Math.abs(out[n]));
-  if (peak > 1e-6) {
-    const k = 0.9 / peak;
-    for (let n = 0; n < len; n++) out[n] *= k;
-  }
+  for (let n = 0; n < len; n++) { const v = out[n] < 0 ? -out[n] : out[n]; if (v > peak) peak = v; }
+  if (peak > 1e-6) { const k = 0.9 / peak; for (let n = 0; n < len; n++) out[n] *= k; }
   return out;
+}
+
+export function renderKS(freq: number, sr: number, p: KsParams, rng: Rng): Float32Array {
+  return runGen(ksGen(freq, sr, p, rng));
 }
 
 // ------------------------------------------------------------------ impulse response
@@ -263,48 +245,48 @@ export interface ReverbParams {
   wet: number;
 }
 
-/**
- * Generator rendering a stereo IR in chunks so the main thread never blocks long.
- * Yields after each chunk; returns when finished (data is in `out`).
- */
-export function* irGenerator(sr: number, p: ReverbParams, seed: number, out: [Float32Array, Float32Array], chunk = 24000) {
+/** Renders a stereo IR into `out` in chunks (yields between chunks). */
+export function* irGenerator(sr: number, p: ReverbParams, seed: number, out: [Float32Array, Float32Array]) {
   const len = out[0].length;
-  const rngs = [mulberry32(seed * 13 + 1), mulberry32(seed * 13 + 2)];
+  const r0 = mulberry32(seed * 13 + 1), r1 = mulberry32(seed * 13 + 2);
   const shared = mulberry32(seed * 13 + 3);
   const pre = Math.floor(p.predelay * sr);
-  const decayK = Math.log(1000) / p.t60; // amplitude exp coefficient
-  const lpState = [0, 0];
-  const hpState = [0, 0];
+  const decayK = Math.log(1000) / p.t60;
+  const envMul = Math.exp(-decayK / sr);
   const hpA = Math.exp((-2 * Math.PI * p.hp) / sr);
-  // early reflection taps
   const taps: { i: number; g: number; ch: number }[] = [];
   const nEarly = Math.floor(4 + p.early * 14);
   for (let k = 0; k < nEarly; k++) {
     const tt = p.predelay + 0.004 + shared() * 0.07;
     taps.push({ i: Math.floor(tt * sr), g: (0.25 + shared() * 0.5) * p.early * Math.exp(-decayK * tt), ch: k & 1 });
   }
-  let i = 0;
-  while (i < len) {
-    const end = Math.min(len, i + chunk);
-    for (; i < end; i++) {
-      const tt = i / sr;
-      const env = i < pre ? 0 : Math.exp(-decayK * (tt - p.predelay)) * Math.min(1, (i - pre) / (sr * 0.006));
-      const cut = p.brightEnd + (p.brightStart - p.brightEnd) * Math.exp((-3 * (tt - p.predelay)) / p.t60);
-      const a = 1 - Math.exp((-2 * Math.PI * cut) / sr);
-      const common = shared() * 2 - 1;
-      for (let ch = 0; ch < 2; ch++) {
-        const w = (rngs[ch]() * 2 - 1) * p.width + common * (1 - p.width);
-        lpState[ch] += a * (w - lpState[ch]);
-        // one-pole highpass
-        const x = lpState[ch];
-        const hp = x - hpState[ch];
-        hpState[ch] = x + hpA * (hpState[ch] - x);
-        out[ch][i] = hp * env;
+  const L = out[0], R = out[1];
+  let lp0 = 0, lp1 = 0, hp0 = 0, hp1 = 0, env = 1, a = 1;
+  const w = p.width, cw = 1 - p.width;
+  for (let i0 = pre; i0 < len; i0 += CHUNK) {
+    const e = Math.min(len, i0 + CHUNK);
+    for (let i = i0; i < e; i++) {
+      if (((i - pre) & 63) === 0) {
+        const tt = (i - pre) / sr;
+        const cut = p.brightEnd + (p.brightStart - p.brightEnd) * Math.exp((-3 * tt) / p.t60);
+        a = 1 - Math.exp((-2 * Math.PI * cut) / sr);
       }
+      const att = i - pre < 288 ? (i - pre) / 288 : 1;
+      const common = shared() * 2 - 1;
+      lp0 += a * ((r0() * 2 - 1) * w + common * cw - lp0);
+      lp1 += a * ((r1() * 2 - 1) * w + common * cw - lp1);
+      const h0 = lp0 - hp0; hp0 = lp0 + hpA * (hp0 - lp0);
+      const h1 = lp1 - hp1; hp1 = lp1 + hpA * (hp1 - lp1);
+      const g = env * att;
+      L[i] = h0 * g; R[i] = h1 * g;
+      env *= envMul;
     }
     yield;
   }
   for (const t of taps) if (t.i < len) out[t.ch][t.i] += t.g;
+  // fade the last 25% so a truncated tail ends smoothly
+  const f0 = Math.floor(len * 0.75);
+  for (let i = f0; i < len; i++) { const k = 1 - (i - f0) / (len - f0); L[i] *= k * k; R[i] *= k * k; }
 }
 
 // ------------------------------------------------------------------ misc curves

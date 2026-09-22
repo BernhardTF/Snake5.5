@@ -186,7 +186,12 @@ export function skinSwatch(s: SkinInfo, cls = '') {
       'mask-image': SNAKE_MASK,
     },
   });
-  return h('div', { class: `swatch ${cls}`, 'data-skin': s.id }, h('div', { class: 'swatch-shadow', style: { '-webkit-mask-image': SNAKE_MASK, 'mask-image': SNAKE_MASK } }), body);
+  return h(
+    'div',
+    { class: `swatch ${cls}`, 'data-skin': s.id },
+    h('div', { class: 'swatch-shadow' }, h('div', { class: 'swatch-shadow-in', style: { '-webkit-mask-image': SNAKE_MASK, 'mask-image': SNAKE_MASK } })),
+    body,
+  );
 }
 
 /** Small round swatch dot (chips). */

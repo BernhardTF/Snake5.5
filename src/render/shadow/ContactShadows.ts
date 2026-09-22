@@ -32,7 +32,7 @@ void main() {
 }
 `;
 
-const BLUR_FRAG = /* glsl */ `
+export const BLUR_FRAG = /* glsl */ `
 varying vec2 vUv;
 uniform sampler2D uTex;
 uniform vec2 uDirR;

@@ -81,6 +81,10 @@ export class App implements UIHost {
     this.audio.setBiome(this.biome);
     this.audio.setScene('menu');
 
+    // unlock/recover audio on every gesture (iOS can interrupt the context)
+    const unlock = () => this.audio.unlock();
+    addEventListener('pointerdown', unlock, { capture: true });
+    addEventListener('keydown', unlock, { capture: true });
     addEventListener('resize', this.onResize);
     addEventListener('orientationchange', this.onResize);
     this.onResize();

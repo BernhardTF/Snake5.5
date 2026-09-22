@@ -1,4 +1,4 @@
-import { h, icon, fmtInt, fmtDayShort } from '../dom';
+import { h, icon, fmtInt } from '../dom';
 import { ICONS } from '../icons';
 import { btn, progress } from '../widgets';
 import type { Screen, ScreenCtx } from '../ctx';
@@ -56,7 +56,7 @@ export function buildTitle(ctx: ScreenCtx): Screen {
       'span',
       { class: 'chip-body' },
       h('span', { class: 'chip-top' }, 'Daily Seed'),
-      h('span', { class: 'chip-sub' }, fmtDayShort(), ' · ', today ? `Best ${fmtInt(today)}` : 'Not played yet'),
+      h('span', { class: 'chip-sub' }, today ? `Today's best ${fmtInt(today)}` : 'New board today'),
     ),
   );
 
@@ -85,7 +85,7 @@ export function buildTitle(ctx: ScreenCtx): Screen {
 
   const el = h(
     'section',
-    { class: 'screen screen-title' },
+    { class: 'screen screen-home' },
     h('div', { class: 'scrim scrim-title' }),
     top,
     h('div', { class: 'title-logo' }, logo()),
@@ -94,14 +94,15 @@ export function buildTitle(ctx: ScreenCtx): Screen {
   );
 
   const waiting = ctx.awaitingGesture();
+  const scr: Screen = { el, focus: waiting ? null : play, onBack: () => false };
   if (waiting) {
     el.classList.add('awaiting');
     ctx.onGesture(() => {
       el.classList.remove('awaiting');
       el.classList.add('revealed');
+      scr.focus = play;
       requestAnimationFrame(() => play.focus({ preventScroll: true }));
     });
   }
-
-  return { el, focus: waiting ? null : play, onBack: () => false };
+  return scr;
 }

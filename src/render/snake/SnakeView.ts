@@ -1,31 +1,113 @@
-// STUB – to be replaced by render-snake agent.
+// Snake renderer: procedural scaled tube + head parts, per-skin physical material.
 import * as THREE from 'three';
 import type { ISnakeView } from '../contract';
 import type { RenderFrame, SkinId } from '../../types';
+import { SnakeBody, type RingFrame } from './SnakeBody';
+import { SnakeHead } from './SnakeHead';
+import { DeathChain } from './DeathChain';
+import { applySkin, createSnakeMaterial, type SnakeUniforms } from './snakeMaterial';
+
+const WAVE_LEN = 2.6;
 
 export class SnakeView implements ISnakeView {
   readonly object = new THREE.Group();
-  private spheres: THREE.InstancedMesh;
+  private body = new SnakeBody();
+  private head = new SnakeHead();
+  private chain = new DeathChain();
+  private mesh: THREE.Mesh;
+  private mat: THREE.MeshPhysicalMaterial;
+  private u: SnakeUniforms;
+  private skin: SkinId | null = null;
+  private phase = 0;
+  private amp = 0;
+  private lead = 0;
+  private wasAlive = true;
+  private r = 0.34;
+  /** Debug hook: constant tongue flicks. */
+  set debugTongue(v: boolean) { this.head.forceTongue = v; }
+  private frameAtBound: (s: number, out: RingFrame) => RingFrame;
+
   constructor() {
-    this.spheres = new THREE.InstancedMesh(
-      new THREE.SphereGeometry(1, 12, 8),
-      new THREE.MeshStandardMaterial({ color: 0x1e1c1a, roughness: 0.5 }),
-      800,
-    );
-    this.object.add(this.spheres);
+    const { mat, u } = createSnakeMaterial();
+    this.mat = mat; this.u = u;
+    this.mesh = new THREE.Mesh(this.body.geometry, mat);
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    this.mesh.frustumCulled = false;
+    this.mesh.name = 'snake-body';
+    this.object.name = 'snake';
+    this.object.add(this.mesh, this.head.group);
+    this.frameAtBound = (s, out) => this.body.frameAt(s, this.r, out);
+    this.setSkin('obsidian');
   }
-  setSkin(_id: SkinId) {}
+
+  setSkin(id: SkinId) {
+    if (id === this.skin) return;
+    this.skin = id;
+    const L = applySkin(this.mat, this.u, id);
+    this.head.setLook(L);
+  }
+
   update(f: RenderFrame) {
-    const m = new THREE.Matrix4();
     const s = f.snake;
-    let n = 0;
-    for (let i = 0; i < s.count && n < 800; i += 2) {
-      const r = s.radius * (i < 4 ? 1.1 : Math.max(0.2, 1 - i / s.count));
-      m.makeScale(r, r, r * 0.7).setPosition(s.points[i * 2], s.points[i * 2 + 1], r * 0.5);
-      this.spheres.setMatrixAt(n++, m);
+    if (s.skin && s.skin !== this.skin) this.setSkin(s.skin);
+    const dt = Math.max(0, Math.min(0.1, f.dt));
+    this.r = s.radius || 0.34;
+    this.u.uR.value = this.r;
+    this.u.uTime.value = f.time;
+
+    // --- death writhe
+    let px = s.points;
+    if (!s.alive) {
+      if (this.wasAlive || !this.chain.active) this.chain.seed(s.points, s.count, s.spacing);
+      if (!f.paused) this.chain.step(dt);
+      px = this.chain.x;
+    } else if (!this.wasAlive) {
+      this.chain.active = false;
     }
-    this.spheres.count = n;
-    this.spheres.instanceMatrix.needsUpdate = true;
+    this.wasAlive = s.alive;
+    this.u.uDead.value = s.alive ? 0 : Math.min(1, s.deathT / 1.2);
+
+    // --- undulation (visual only)
+    const spd = Math.abs(s.speed);
+    const turn = Math.min(1, Math.abs(s.turnRate) / 3);
+    let targetAmp = Math.min(0.12, (0.004 + spd * 0.0105) * (1 + 0.35 * turn));
+    if (!s.alive) targetAmp = 0;
+    const kA = 1 - Math.exp(-dt * (s.alive ? 3 : 8));
+    this.amp += (targetAmp - this.amp) * kA;
+    if (!f.paused) this.phase = (this.phase + (Math.PI * 2 * spd * dt) / WAVE_LEN) % (Math.PI * 2000);
+    const targetLead = s.alive ? Math.max(-0.07, Math.min(0.07, -s.turnRate * 0.018)) : 0;
+    this.lead += (targetLead - this.lead) * (1 - Math.exp(-dt * 8));
+
+    this.body.build({
+      px, count: s.count, spacing: s.spacing, radius: this.r,
+      fwdX: s.dirX, fwdY: s.dirY, bulges: s.bulges,
+      waveAmp: this.amp, wavePhase: this.phase, waveLen: WAVE_LEN, headLead: this.lead,
+    });
+
+    // --- ghost
+    let opacity = 1;
+    if (s.ghost) {
+      opacity = 0.34 + 0.07 * Math.sin(f.time * 23) * Math.sin(f.time * 7.3) + 0.05 * Math.sin(f.time * 3.1);
+      this.u.uGhost.value = Math.min(1, (this.u.uGhost.value as number) + dt * 5);
+    } else {
+      this.u.uGhost.value = Math.max(0, (this.u.uGhost.value as number) - dt * 5);
+    }
+    const tr = (this.u.uGhost.value as number) > 0.01;
+    if (this.mat.transparent !== tr) { this.mat.transparent = tr; this.mat.needsUpdate = true; }
+    this.mat.opacity = tr ? 1 - (1 - opacity) * (this.u.uGhost.value as number) : 1;
+    this.mat.depthWrite = true;
+    this.mesh.visible = s.count >= 2;
+    this.head.group.visible = s.count >= 2;
+
+    if (s.count >= 2) {
+      this.head.update(this.frameAtBound, this.body.tipS, this.r, f.paused ? 0 : dt, s.alive, s.deathT, s.interest, tr, this.mat.opacity);
+    }
   }
-  dispose() {}
+
+  dispose() {
+    this.body.geometry.dispose();
+    this.mat.dispose();
+    this.head.dispose();
+  }
 }

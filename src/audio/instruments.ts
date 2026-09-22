@@ -1,5 +1,5 @@
 // Synthesised instruments. Each function renders one note into a Voice at time `t`.
-import { KsParams, Rng, clamp, makeNoiseBuffer, mtof, mulberry32, renderKS } from './dsp';
+import { KsParams, NoiseColor, Rng, clamp, ksGen, mtof, mulberry32, noiseGen, runGen } from './dsp';
 import type { Voice } from './voices';
 
 export type PluckKind = 'koto' | 'oud' | 'slack' | 'charango' | 'kotoBass';
@@ -9,7 +9,7 @@ interface PluckDef { ks: KsParams; sr: number; stereo?: boolean }
 const PLUCKS: Record<PluckKind, PluckDef> = {
   koto: {
     sr: 32000,
-    ks: { t60: 2.6, bright: 0.75, damp: 0.14, pos: 0.12, len: 2.3, body: [[420, 1.2, 4], [1900, 2, 3], [3400, 3, 2]] },
+    ks: { t60: 2.6, bright: 0.6, damp: 0.17, pos: 0.12, len: 2.3, body: [[420, 1.2, 4], [1900, 2, 2], [3400, 3, 1]], lp: 7000 },
   },
   kotoBass: {
     sr: 24000,
@@ -34,24 +34,53 @@ export class Synth {
   detune = 0;
   private ksCache = new Map<string, AudioBuffer>();
   private ksOrder: string[] = [];
-  private noises: Partial<Record<'white' | 'pink' | 'brown', AudioBuffer>> = {};
+  private noises: Partial<Record<NoiseColor, AudioBuffer>> = {};
+  private quick: AudioBuffer | null = null;
   readonly rng: Rng;
+  /** When true (offline rendering) missing buffers are rendered synchronously. */
+  sync = false;
   constructor(readonly ctx: BaseAudioContext, seed = 1) {
     this.rng = mulberry32(seed);
   }
 
-  noise(c: 'white' | 'pink' | 'brown'): AudioBuffer {
-    let b = this.noises[c];
-    if (!b) {
-      b = makeNoiseBuffer(this.ctx, c === 'white' ? 2.5 : 4, c, c === 'white' ? 11 : c === 'pink' ? 23 : 37);
-      this.noises[c] = b;
+  noiseReady(c: NoiseColor) { return !!this.noises[c]; }
+
+  /** Chunked job that renders a noise loop. */
+  *noiseTask(c: NoiseColor): Generator<void, void, unknown> {
+    if (this.noises[c]) return;
+    const data = yield* noiseGen(this.ctx.sampleRate, 3, c, c === 'white' ? 11 : c === 'pink' ? 23 : 37);
+    if (this.noises[c]) return;
+    const b = this.ctx.createBuffer(2, data[0].length, this.ctx.sampleRate);
+    b.copyToChannel(data[0] as Float32Array<ArrayBuffer>, 0);
+    b.copyToChannel(data[1] as Float32Array<ArrayBuffer>, 1);
+    this.noises[c] = b;
+  }
+
+  /** Noise loop buffer; before the full loop is rendered a tiny white-noise fallback is used. */
+  noise(c: NoiseColor): AudioBuffer {
+    const b = this.noises[c];
+    if (b) return b;
+    if (this.sync) { runGen(this.noiseTask(c)); return this.noises[c]!; }
+    if (!this.quick) {
+      const sr = this.ctx.sampleRate, len = Math.floor(sr * 0.35);
+      this.quick = this.ctx.createBuffer(1, len, sr);
+      const d = this.quick.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (this.rng() * 2 - 1) * 0.5;
     }
-    return b;
+    return this.quick;
   }
   hasKs(kind: PluckKind, midi: number) { return this.ksCache.has(kind + ':' + Math.round(midi)); }
 
   /** Get (or render and cache) a KS note buffer. */
   ks(kind: PluckKind, midi: number): AudioBuffer {
+    midi = Math.round(midi);
+    const hit = this.ksCache.get(kind + ':' + midi);
+    if (hit) return hit;
+    return runGen(this.ksTask(kind, midi));
+  }
+
+  /** Chunked job rendering one KS note into the cache. */
+  *ksTask(kind: PluckKind, midi: number): Generator<void, AudioBuffer, unknown> {
     midi = Math.round(midi);
     const key = kind + ':' + midi;
     const hit = this.ksCache.get(key);
@@ -60,24 +89,26 @@ export class Synth {
     const r = mulberry32(midi * 131 + kind.length * 7);
     const f = mtof(midi);
     // high notes decay faster
-    const k = clamp(Math.pow(2, -(midi - 60) / 24), 0.5, 1.6);
+    const k = clamp(Math.pow(2, -(midi - 60) / 24), 0.85, 1.6);
     const ks = { ...def.ks, t60: def.ks.t60 * k };
     let buf: AudioBuffer;
     if (def.stereo) {
-      const a = renderKS(f, def.sr, { ...ks, cents: -5 }, r);
-      const b = renderKS(f, def.sr, { ...ks, cents: 5, pos: ks.pos * 1.3 }, r);
+      const a = yield* ksGen(f, def.sr, { ...ks, cents: -5 }, r);
+      const b = yield* ksGen(f, def.sr, { ...ks, cents: 5, pos: ks.pos * 1.3 }, r);
       const len = Math.min(a.length, b.length);
       buf = this.ctx.createBuffer(2, len, def.sr);
       const L = buf.getChannelData(0), R = buf.getChannelData(1);
       for (let i = 0; i < len; i++) { L[i] = (a[i] + 0.45 * b[i]) * 0.72; R[i] = (b[i] + 0.45 * a[i]) * 0.72; }
     } else {
-      const a = renderKS(f, def.sr, ks, r);
+      const a = yield* ksGen(f, def.sr, ks, r);
       buf = this.ctx.createBuffer(1, a.length, def.sr);
       buf.getChannelData(0).set(a);
     }
+    const again = this.ksCache.get(key);
+    if (again) return again;
     this.ksCache.set(key, buf);
     this.ksOrder.push(key);
-    while (this.ksOrder.length > 72) this.ksCache.delete(this.ksOrder.shift()!);
+    while (this.ksOrder.length > 56) this.ksCache.delete(this.ksOrder.shift()!);
     return buf;
   }
 
@@ -221,8 +252,11 @@ export class Synth {
 
   bell(v: Voice, t: number, midi: number, dur: number, vel: number,
     o: { ratio?: number; index?: number; pan?: number; glass?: boolean } = {}) {
-    const f = mtof(midi) * this.rate();
-    const ratio = o.ratio ?? (o.glass ? 3.5 : 1.4);
+    const nyq = this.ctx.sampleRate * 0.45;
+    let f = mtof(midi) * this.rate();
+    while (f > 5000) f /= 2;
+    let ratio = o.ratio ?? (o.glass ? 3.5 : 1.4);
+    if (f * ratio > nyq) ratio = Math.max(1, nyq / f);
     const idx = o.index ?? (o.glass ? 0.8 : 2.2);
     const amp = v.gain(0);
     const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
@@ -235,7 +269,7 @@ export class Synth {
     mod.connect(mg).connect(car.frequency);
     car.connect(amp);
     // inharmonic upper partial
-    const p2 = v.osc('sine', f * (o.glass ? 2.0 : 2.76));
+    const p2 = v.osc('sine', Math.min(nyq, f * (o.glass ? 2.0 : 2.76)));
     const p2g = v.gain(0);
     p2g.gain.setValueAtTime(vel * 0.25, t + 0.002);
     p2g.gain.setTargetAtTime(0, t + 0.002, dur * 0.12 + 0.01);
