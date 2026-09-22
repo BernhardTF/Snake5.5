@@ -72,3 +72,8 @@ See [`docs/SPEC.md`](docs/SPEC.md) and [`docs/PLAN.md`](docs/PLAN.md).
 `.github/workflows/deploy.yml` runs the tests and builds on every push to `main` and `claude/**`,
 but only deploys to GitHub Pages from `main` or a manual workflow run. To deploy, enable Pages
 (source: GitHub Actions) in the repository settings.
+
+## Single-file build
+`npm run build:single` bundles the whole game into one self-contained HTML file
+(`dist-single/serpent-sands.html`, about 1 MB), for hosts that accept only one page. The single-file
+version has no offline or PWA support.
