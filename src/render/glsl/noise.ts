@@ -72,5 +72,30 @@ vec3 voronoi(vec2 x, float jitter) {
   }
   return vec3(ed, hash12(n + mg), sqrt(md));
 }
+// Voronoi with the (unit) gradient of the edge distance: returns vec3(edgeDist, cellHash, centerDist)
+vec3 voronoiG(vec2 x, float jitter, out vec2 grad) {
+  vec2 n = floor(x), f = fract(x);
+  vec2 mg, mr; float md = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 o = 0.5 + (hash22(n + g) - 0.5) * jitter;
+    vec2 r = g + o - f;
+    float d = dot(r, r);
+    if (d < md) { md = d; mr = r; mg = g; }
+  }
+  float ed = 8.0;
+  grad = vec2(0.0);
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec2 g = mg + vec2(float(i), float(j));
+    vec2 o = 0.5 + (hash22(n + g) - 0.5) * jitter;
+    vec2 r = g + o - f;
+    if (dot(mr - r, mr - r) > 0.00001) {
+      vec2 nn = normalize(r - mr);
+      float e = dot(0.5 * (mr + r), nn);
+      if (e < ed) { ed = e; grad = -nn; }
+    }
+  }
+  return vec3(ed, hash12(n + mg), sqrt(md));
+}
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 `;

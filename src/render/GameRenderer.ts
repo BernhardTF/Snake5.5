@@ -73,6 +73,9 @@ export class GameRenderer implements IGameRenderer {
   private deathFade = 0;
   private disposed = false;
   private drewThisTask = false;
+  private simDt = 0;
+  private biomeReady = false;
+  private boardReady = false;
   private resetTask = () => { this.drewThisTask = false; };
 
   get frameMs() { return this._frameMs; }
@@ -122,11 +125,11 @@ export class GameRenderer implements IGameRenderer {
     }
     this.sandMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.sandMats[0]);
     this.sandMesh.frustumCulled = false;
-    this.sandMesh.renderOrder = -2;
+    this.sandMesh.renderOrder = 5; // drawn after snake/props/frame so early-z skips hidden sand
     this.frameMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.frameMats[0]);
     this.frameMesh.position.z = FRAME_Z;
     this.frameMesh.frustumCulled = false;
-    this.frameMesh.renderOrder = -1;
+    this.frameMesh.renderOrder = 4;
     this.scene.add(this.sandMesh, this.frameMesh);
 
     this.env = new Environment(this.renderer, this.scene);
@@ -152,6 +155,8 @@ export class GameRenderer implements IGameRenderer {
   }
 
   setBiome(id: BiomeId) {
+    if (this.biomeReady && id === this.biome.id) { this.clearSand(); return; }
+    this.biomeReady = true;
     const v = BIOME_VISUALS[id];
     this.biome = v;
     this.sandMesh.material = this.sandMats[v.index];
@@ -180,6 +185,8 @@ export class GameRenderer implements IGameRenderer {
   }
 
   setBoard(w: number, h: number) {
+    if (this.boardReady && w === this.W && h === this.H) { this.clearSand(); this.fitCamera(); return; }
+    this.boardReady = true;
     this.W = w; this.H = h;
     this.sim.setBoard(w, h);
     this.shadows.configure(this.sim.region, this.preset.shadowRes);
@@ -231,12 +238,15 @@ export class GameRenderer implements IGameRenderer {
 
   render(frame: RenderFrame) {
     if (this.disposed) return;
-    const now = performance.now();
-    if (this.lastNow) {
-      const d = Math.min(250, now - this.lastNow);
-      this._frameMs = this._frameMs * 0.94 + d * 0.06;
+    if (!this.drewThisTask) {
+      // frame-to-frame CPU time (catch-up calls within one task are not frames)
+      const now = performance.now();
+      if (this.lastNow) {
+        const d = Math.min(250, now - this.lastNow);
+        this._frameMs = this._frameMs * 0.94 + d * 0.06;
+      }
+      this.lastNow = now;
     }
-    this.lastNow = now;
     if (frame.boardW !== this.W || frame.boardH !== this.H) this.setBoard(frame.boardW, frame.boardH);
     this.lastFrame = frame;
     // Several render() calls inside one task (catch-up / fast-forward) only need one visible draw:
@@ -265,7 +275,7 @@ export class GameRenderer implements IGameRenderer {
     const p = PRESETS[this.opts.quality] ?? PRESETS.high;
     const changed = p !== this.preset || force;
     this.preset = p;
-    this.sim.setResolution(p.simRes);
+    this.sim.setResolution(p.simRes, this.renderer);
     if (changed) this.shadows.configure(this.sim.region, p.shadowRes);
     this.post.configure(p.post, p.post && p.bloom && this.opts.bloom, p.post && p.dof && this.opts.dof, p.post && p.grain, p.samples);
     this.particles.enabled = this.opts.particles;
@@ -348,7 +358,12 @@ export class GameRenderer implements IGameRenderer {
 
     if (!snapshot && !f.paused) {
       this.sim.ingest(f);
-      this.sim.step(r, dt, f.time);
+      this.simDt += dt;
+      // catch-up frames (several render() calls in one task) batch their stamps into fewer passes
+      if (!simOnly || this.sim.pending >= 12 || this.simDt >= 0.3) {
+        this.sim.step(r, this.simDt, f.time);
+        this.simDt = 0;
+      }
     }
     this.sandU.uDeform.value = this.sim.texture;
     if (simOnly) {

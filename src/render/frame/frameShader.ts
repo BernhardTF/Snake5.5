@@ -79,7 +79,7 @@ Surf outerSurf(vec2 p) {
   float pw = 1.05;
   float row = floor(p.y / pw);
   float fy = fract(p.y / pw);
-  float gap = smoothstep(0.0, 0.03, fy) * smoothstep(1.0, 0.97, fy);
+  float gap = smoothstep(0.0, 0.03, fy) * (1.0 - smoothstep(0.97, 1.0, fy));
   float seed = hash12(vec2(row, 2.0)) * 20.0;
   float joint = step(0.985, fract(p.x / 6.3 + hash12(vec2(row, 5.0))));
   s.alb = woodCol(p.x, fy * pw, seed) * (0.8 + 0.35 * hash12(vec2(row, 9.0))) * gap * (1.0 - joint * 0.7);
@@ -200,7 +200,7 @@ Surf outerSurf(vec2 p) {
   float along = dirX > 0.5 ? g.x : g.y;
   vec3 c = mix(vec3(0.33, 0.22, 0.1), vec3(0.45, 0.33, 0.16), hash12(dirX > 0.5 ? vec2(id.y, 1.0) : vec2(id.x, 2.0)));
   c *= 0.85 + 0.2 * vnoise(vec2(along * 6.0, across * 3.0));
-  float edge = smoothstep(0.0, 0.12, across) * smoothstep(1.0, 0.88, across);
+  float edge = smoothstep(0.0, 0.12, across) * (1.0 - smoothstep(0.88, 1.0, across));
   s.alb = c * (0.6 + 0.4 * edge);
   vec2 n = dirX > 0.5 ? vec2(0.0, (0.5 - f.y)) : vec2(0.5 - f.x, 0.0);
   s.nrm = n * 1.2;
@@ -376,7 +376,7 @@ void main() {
     // shadow cast by the frame onto the lower surroundings
     vec2 ps = p + L.xy / max(L.z, 0.2) * uFrameH * 0.9;
     float dps = boardDist(ps);
-    float inFrame = smoothstep(b + 0.08, b - 0.04, dps);
+    float inFrame = (1.0 - smoothstep(b - 0.04, b + 0.08, dps));
     float vis2 = vis * (1.0 - 0.75 * inFrame);
     col = light(s, N, vis2);
     col *= mix(0.6, 1.0, smoothstep(b, b + 0.35, d));

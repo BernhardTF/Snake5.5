@@ -25,6 +25,7 @@ uniform vec4 uWave;
 uniform vec4 uSegA[${MAXSEG}];
 uniform vec4 uSegP[${MAXSEG}];
 uniform int uSegCount;
+uniform vec4 uSegBox; // world bbox of this pass' stamps (early-out)
 ${NOISE_GLSL}
 float sq(float x) { return x * x; }
 void main() {
@@ -71,8 +72,9 @@ void main() {
     }
 #endif
   }
+  bool inBox = p.x >= uSegBox.x && p.y >= uSegBox.y && p.x <= uSegBox.z && p.y <= uSegBox.w;
   for (int i = 0; i < ${MAXSEG}; i++) {
-    if (i >= uSegCount) break;
+    if (i >= uSegCount || !inBox) break;
     vec4 A = uSegA[i];
     vec4 P = uSegP[i];
     int type = int(P.w + 0.5);
@@ -91,11 +93,11 @@ void main() {
       w *= 1.0 + rough * 0.25 * nz;
       float dn = dist / w;
       float g = -depth * (1.0 - smoothstep(0.5, 0.95, dn));
-      c.r = min(c.r, g);
-      if (tu >= 0.0 && dn > 0.8) {
-        float berm = depth * 0.45 * exp(-sq((dn - 1.12) / 0.3));
-        c.r = max(c.r, berm);
-      }
+      float berm = tu >= 0.0 ? depth * 0.45 * exp(-sq((dn - 1.12) / 0.3)) : 0.0;
+      float prof = g + berm;
+      // carve where the profile is below grade; only raise sand that isn't already a groove
+      if (prof < 0.0) c.r = min(c.r, prof);
+      else if (c.r > -0.05) c.r = max(c.r, prof);
       c.g = max(c.g, 1.0 - smoothstep(1.12, 1.5, dn));
       c.b = max(c.b, uHeatSet * (1.0 - smoothstep(0.55, 1.05, dn)));
     } else if (type == 1) {
@@ -107,23 +109,25 @@ void main() {
       float dn = dist / P.x;
       if (dn > 2.5) continue;
       float wf = smoothstep(0.0, P.x * 0.6, fwd);
-      c.r = max(c.r, P.y * exp(-dn * dn * 2.0) * wf);
+      if (c.r > -0.05) c.r = max(c.r, P.y * exp(-dn * dn * 2.0) * wf);
       c.g = max(c.g, (1.0 - smoothstep(0.8, 1.4, dn)) * wf);
     } else if (type == 2) {
       float dist = length(p - A.xy);
       float dn = dist / P.x;
       if (dn > 2.5) continue;
       float depth = P.y * (1.0 + 0.25 * (vnoise(p * 6.0) - 0.5));
-      c.r = min(c.r, -depth * (1.0 - smoothstep(0.25, 1.0, dn)));
-      c.r = max(c.r, depth * 0.5 * exp(-sq((dn - 1.15) / 0.35)));
+      if (dn < 1.0) c.r = min(c.r, -depth * (1.0 - smoothstep(0.25, 1.0, dn)));
+      float rim = depth * 0.5 * exp(-sq((dn - 1.15) / 0.35));
+      if (c.r > -0.05) c.r = max(c.r, rim);
       c.g = max(c.g, 1.0 - smoothstep(1.3, 1.8, dn));
       c.b = max(c.b, uHeatSet * (1.0 - smoothstep(0.6, 1.1, dn)));
     } else {
       float dist = length(p - A.xy);
       float rr = P.x;
+      if (dist > rr + 0.45) continue;
       float ring = exp(-sq((dist - rr) / 0.07)) + 0.6 * exp(-sq((dist - rr * 0.68) / 0.06));
-      c.r = max(c.r, P.y * ring);
-      c.g = max(c.g, 0.9 * smoothstep(rr + 0.25, rr - 0.1, dist) * smoothstep(0.0, rr * 0.4, dist));
+      if (c.r > -0.05) c.r = max(c.r, P.y * ring);
+      c.g = max(c.g, 0.9 * (1.0 - smoothstep(rr - 0.1, rr + 0.25, dist)) * smoothstep(0.0, rr * 0.4, dist));
     }
   }
   gl_FragColor = c;
@@ -143,6 +147,7 @@ export class DeformSim {
   private clearMat = passMaterial(CLEAR_FRAG, {});
   private segA: THREE.Vector4[] = [];
   private segP: THREE.Vector4[] = [];
+  private segBox = new THREE.Vector4();
   private queue: number[] = []; // flat 8 floats per seg
   private biome: BiomeVisual = BIOME_VISUALS.karesansui;
   private res = 512;
@@ -173,7 +178,7 @@ export class DeformSim {
         uDt: { value: 0 }, uDiffK: { value: 0 }, uTalus: { value: 1 }, uRelax: { value: 1 },
         uErode: { value: 0 }, uSmear: { value: 0 }, uBDecay: { value: 0 }, uHeatSet: { value: 0 },
         uTime: { value: 0 }, uWind: { value: new THREE.Vector2() }, uWave: { value: this.wave },
-        uSegA: { value: this.segA }, uSegP: { value: this.segP }, uSegCount: { value: 0 },
+        uSegA: { value: this.segA }, uSegP: { value: this.segP }, uSegCount: { value: 0 }, uSegBox: { value: this.segBox },
       }, { BIOME: b }));
     }
   }
@@ -193,18 +198,29 @@ export class DeformSim {
     this.clear();
   }
 
-  setResolution(res: number) {
+  /** Change sim resolution (quality). Existing trails are resampled into the new targets. */
+  setResolution(res: number, r?: THREE.WebGLRenderer) {
     if (res === this.res && this.rts.length) return;
     this.res = res;
-    this.alloc();
+    const old = this.rts[this.cur];
+    const keep = !!(r && old && !this.needsClear);
+    this.alloc(keep ? old : null);
+    if (keep && r) {
+      this.copyMat.uniforms.uTex.value = old.texture;
+      for (const rt of this.rts) this.fsq.render(r, this.copyMat, rt);
+      r.setRenderTarget(null);
+      this.needsClear = false;
+    }
+    old?.dispose();
   }
+  private copyMat = passMaterial(/* glsl */`varying vec2 vUv; uniform sampler2D uTex; void main(){ gl_FragColor = texture2D(uTex, vUv); }`, { uTex: { value: null } });
 
   setBoard(w: number, h: number) {
     this.boardW = w; this.boardH = h;
     this.alloc();
   }
 
-  private alloc() {
+  private alloc(spare: THREE.WebGLRenderTarget | null = null) {
     const W = this.boardW + MARGIN * 2, H = this.boardH + MARGIN * 2;
     const texel = Math.max(W, H) / this.res;
     this.texW = Math.max(2, Math.round(W / texel));
@@ -212,8 +228,10 @@ export class DeformSim {
     const rw = this.texW * texel, rh = this.texH * texel;
     this.region.set(this.boardW / 2 - rw / 2, this.boardH / 2 - rh / 2, rw, rh);
     this.texel.set(1 / this.texW, 1 / this.texH);
-    for (const rt of this.rts) rt.dispose();
+    for (const rt of this.rts) if (rt !== spare) rt.dispose();
     this.rts = [makeRT(this.texW, this.texH), makeRT(this.texW, this.texH)];
+    this.cur = 0;
+    if (spare) return; // resolution change only: keep coverage + head tracking
     this.covW = Math.ceil(this.boardW * COV_RES);
     this.covH = Math.ceil(this.boardH * COV_RES);
     this.cov = new Uint8Array(this.covW * this.covH);
@@ -229,6 +247,8 @@ export class DeformSim {
   }
 
   coverage() { return this.covCount / Math.max(1, this.cov.length); }
+  /** Number of queued stamp segments. */
+  get pending() { return this.queue.length / 8; }
 
   private push(ax: number, ay: number, bx: number, by: number, w: number, depth: number, rough: number, type: number) {
     this.queue.push(ax, ay, bx, by, w, depth, rough, type);
@@ -344,7 +364,7 @@ export class DeformSim {
       this.needsClear = false;
     }
     this.simTime = time;
-    dt = Math.min(dt, 0.1);
+    dt = Math.min(dt, 0.5);
     this.updateWaves(dt);
     const b = this.biome;
     const m = this.mats[b.index];
@@ -364,11 +384,19 @@ export class DeformSim {
     let qi = 0;
     do {
       const n = Math.min(MAXSEG, (q.length - qi) / 8);
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
       for (let i = 0; i < n; i++) {
         const o = qi + i * 8;
         this.segA[i].set(q[o], q[o + 1], q[o + 2], q[o + 3]);
         this.segP[i].set(q[o + 4], q[o + 5], q[o + 6], q[o + 7]);
+        // conservative reach of the stamp: groove 2.2w, bump/crater 2.5r, ring r + 0.45
+        const t = q[o + 7], w = q[o + 4];
+        const reach = t === SEG_GROOVE ? w * 2.6 : t === SEG_RING ? w + 0.5 : w * 2.6;
+        const bx = t === SEG_GROOVE ? q[o + 2] : q[o], by = t === SEG_GROOVE ? q[o + 3] : q[o + 1];
+        x0 = Math.min(x0, q[o] - reach, bx - reach); y0 = Math.min(y0, q[o + 1] - reach, by - reach);
+        x1 = Math.max(x1, q[o] + reach, bx + reach); y1 = Math.max(y1, q[o + 1] + reach, by + reach);
       }
+      this.segBox.set(x0, y0, x1, y1);
       qi += n * 8;
       u.uSegCount.value = n;
       u.uRelax.value = first ? 1 : 0;
@@ -385,6 +413,7 @@ export class DeformSim {
     for (const rt of this.rts) rt.dispose();
     for (const m of this.mats) m.dispose();
     this.clearMat.dispose();
+    this.copyMat.dispose();
     this.fsq.dispose();
   }
 }

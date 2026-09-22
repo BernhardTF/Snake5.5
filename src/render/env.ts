@@ -29,7 +29,7 @@ void main() {
     c = mix(c, uHorizon * 1.25 + 0.15, smoothstep(0.55, 0.85, cl) * 0.5 * (1.0 - z * 0.5));
   }
   // bright window strip for a pleasing specular stripe on the snake
-  float strip = smoothstep(0.1, 0.0, abs(d.x + d.y * 0.3 + 0.2)) * smoothstep(0.2, 0.6, z);
+  float strip = (1.0 - smoothstep(0.0, 0.1, abs(d.x + d.y * 0.3 + 0.2))) * smoothstep(0.2, 0.6, z);
   c += uGlow * strip * 0.6;
   gl_FragColor = vec4(c, 1.0);
 }

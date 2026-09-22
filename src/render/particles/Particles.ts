@@ -66,7 +66,8 @@ void main() {
 }
 `;
 
-interface Cfg { rate: number; }
+/** Ambient spawn rate per second at multiplier 1. */
+const RATES: Record<BiomeId, number> = { karesansui: 1.3, erg: 10, lagoon: 7, svartsandur: 9, salar: 6 };
 
 export class Particles {
   readonly object: THREE.Points;
@@ -154,8 +155,7 @@ export class Particles {
   private ambient(dt: number, f: RenderFrame, waveEdge: number, waveFoam: number) {
     const W = this.W, H = this.H;
     const R = Math.random;
-    const rates: Record<BiomeId, number> = { karesansui: 1.3, erg: 10, lagoon: 7, svartsandur: 9, salar: 6 };
-    this.acc += dt * rates[this.biome] * this.multiplier;
+    this.acc += dt * RATES[this.biome] * this.multiplier;
     const c = this.tmpC;
     while (this.acc >= 1) {
       this.acc -= 1;
@@ -236,7 +236,7 @@ export class Particles {
           const x = s.points[k * 2] ?? e.x, y = s.points[k * 2 + 1] ?? e.y;
           const a = R() * 6.283, sp = 0.2 + R() * 0.6;
           c.copy(this.sandCol).multiplyScalar(0.7 + R() * 0.2);
-          this.spawn(x, y, 0.2, Math.cos(a) * sp, Math.sin(a) * sp, 0.3, 2.2 + R() * 1.5, 0.5 + R() * 0.6, K_DUST, c, 0.4, 0, 0, 0.8, 0.6);
+          this.spawn(x, y, 0.2, Math.cos(a) * sp, Math.sin(a) * sp, 0.3, 2.2 + R() * 1.5, 0.45 + R() * 0.5, K_DUST, c, 0.22, 0, 0, 0.8, 0.5);
         }
       } else if (e.type === 'powerup') {
         c.setRGB(0.6, 0.9, 1.4).multiplyScalar(2);

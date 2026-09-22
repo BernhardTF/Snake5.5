@@ -67,6 +67,11 @@ export class ContactShadows {
   private hidden: THREE.Object3D[] = [];
   private clearColor = new THREE.Color(0, 0, 0);
   private prevClear = new THREE.Color();
+  private hideVisit = (o: THREE.Object3D) => {
+    if (o.visible && (o.userData.noShadow || (o as any).isPoints || (o as any).isSprite || (o as any).isLine)) {
+      o.visible = false; this.hidden.push(o);
+    }
+  };
 
   constructor() {
     this.occMat = new THREE.ShaderMaterial({
@@ -113,13 +118,7 @@ export class ContactShadows {
     // hide non-occluders and opted-out objects, render the main scene with the override material
     this.hidden.length = 0;
     for (const o of exclude) if (o.visible) { o.visible = false; this.hidden.push(o); }
-    for (const root of this.roots) {
-      root.traverse((o) => {
-        if (o.visible && (o.userData.noShadow || (o as any).isPoints || (o as any).isSprite || (o as any).isLine)) {
-          o.visible = false; this.hidden.push(o);
-        }
-      });
-    }
+    for (const root of this.roots) root.traverse(this.hideVisit);
     const prevAuto = r.autoClear;
     const prevOverride = scene.overrideMaterial;
     const prevBg = scene.background;

@@ -22,17 +22,19 @@ mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 float maple(vec2 p, vec2 c, float size, float ang) {
   vec2 q = rot(-ang) * (p - c) / size;
   float r = length(q);
-  float th = atan(q.x, q.y); // 0 = leaf tip up
-  float lobes = abs(cos(th * 3.5));
-  float rr = 0.28 + 0.72 * pow(lobes, 2.2);
-  rr *= 1.0 - 0.55 * smoothstep(2.3, 3.1, abs(th)); // notch at stem
-  float leaf = 1.0 - smoothstep(rr - 0.06, rr + 0.06, r);
-  float stem = 1.0 - smoothstep(0.02, 0.05, sdSeg(q, vec2(0.0), vec2(0.0, -0.75)));
+  float th = atan(q.x, q.y);               // 0 = main lobe tip
+  float n = 7.0 / 6.2831853;
+  float saw = 1.0 - abs(fract(th * n + 0.5) * 2.0 - 1.0);   // 1 at lobe axis, 0 at sinus
+  float lobeLen = 0.5 + 0.5 * cos(th * 0.62);               // side lobes shorter
+  float rr = 0.2 + 0.8 * lobeLen * pow(saw, 1.4);
+  rr *= 1.0 - smoothstep(2.5, 3.14, abs(th));              // gap at the stem
+  float leaf = 1.0 - smoothstep(rr - 0.05, rr + 0.05, r);
+  float stem = 1.0 - smoothstep(0.02, 0.05, sdSeg(q, vec2(0.0), vec2(0.0, -0.8)));
   return max(leaf, stem);
 }
 // lanceolate bamboo leaf along +x from c
 float bambooLeaf(vec2 p, vec2 c, float len, float wid, float ang) {
-  vec2 q = rot(-ang) * (p - c);
+  vec2 q = rot(ang) * (p - c);   // rot(a) as written rotates by -a
   float t = q.x / len;
   if (t < 0.0 || t > 1.0) return 0.0;
   float w = wid * pow(sin(PI * pow(t, 0.7)), 0.8);
@@ -68,14 +70,14 @@ void main() {
   float nearL = 0.0, farL = 0.0;
 #if BIOME == 0
   // maple cluster hanging over the top-right corner
-  vec2 anchor = vec2(W + 1.5, H + 1.8);
-  for (int i = 0; i < 17; i++) {
+  vec2 anchor = vec2(W + 0.6, H + 1.0);
+  for (int i = 0; i < 13; i++) {
     float fi = float(i);
     vec2 h = hash22(vec2(fi * 1.7, 3.1));
     float ang = mix(3.25, 4.75, h.x);
-    float rad = mix(1.5, 9.0, pow(h.y, 0.8));
+    float rad = mix(1.2, 7.5, pow(h.y, 0.8));
     vec2 c = anchor + vec2(cos(ang), sin(ang)) * rad + (hash22(vec2(fi, 9.0)) - 0.5) * 1.2;
-    float sz = mix(0.8, 1.35, hash12(vec2(fi, 4.2)));
+    float sz = mix(0.95, 1.55, hash12(vec2(fi, 4.2)));
     nearL = max(nearL, maple(p, c, sz, hash12(vec2(fi, 7.7)) * 6.28));
   }
   // twigs

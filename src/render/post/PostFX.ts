@@ -86,7 +86,7 @@ void main() {
   vec3 c = texture2D(uScene, uv).rgb;
   if (uSlow > 0.001) {
     vec2 dir = uv - 0.5;
-    float k = uSlow * 0.012 * dot(dir, dir) * 4.0;
+    float k = uSlow * 0.004 * dot(dir, dir) * 4.0;
     c.r = texture2D(uScene, uv + dir * k).r;
     c.b = texture2D(uScene, uv - dir * k).b;
   }

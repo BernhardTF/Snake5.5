@@ -23,9 +23,9 @@ vec3 waterShade(vec3 under, vec2 p, float edgeN, float t, float sheet, vec3 amb,
   vec3 g2 = gnoised(p * vec2(3.1, 5.3) - vec2(t * 0.5, t * 0.8));
   vec3 wn = normalize(vec3(-(g.yz * 0.07 + g2.yz * 0.035) * (0.3 + depth), 1.0));
   vec3 vc = voronoi(p * 2.2 + vec2(t * 0.2, t * 0.35) + g.yz * 0.25, 1.0);
-  float caus = (1.0 - smoothstep(0.0, 0.1, vc.x)) * (1.0 - depth) * smoothstep(0.05, 0.4, edgeN);
+  float caus = (1.0 - smoothstep(0.0, 0.16, vc.x)) * (1.0 - depth) * smoothstep(0.1, 0.6, edgeN);
   vec3 absorb = mix(vec3(0.88, 0.98, 0.97), vec3(0.25, 0.62, 0.6), smoothstep(0.0, 0.8, depth));
-  vec3 c = under * absorb + sunC * caus * 0.05;
+  vec3 c = under * absorb + sunC * caus * 0.035;
   vec3 deep = vec3(0.01, 0.16, 0.17) * (amb * 1.5 + sunC * 0.45);
   c = mix(c, deep, smoothstep(0.25, 1.0, depth) * 0.9);
   vec3 R = reflect(vec3(0.0, 0.0, -1.0), wn);
@@ -41,7 +41,6 @@ vec3 waterShade(vec3 under, vec2 p, float edgeN, float t, float sheet, vec3 amb,
   float lace = bubbles * blot;
   float line = exp(-sq((edgeN - 0.04) / 0.05)) * (0.8 + 0.2 * g2.x);
   float foam = max(line, lace * exp(-max(edgeN, 0.0) / 0.45) * smoothstep(-0.02, 0.1, edgeN));
-  foam += bubbles * smoothstep(0.8, 0.95, vnoise(p * vec2(0.5, 2.5) + vec2(0.0, -t * 0.3))) * 0.2 * depth;
   vec3 foamC = vec3(0.96, 0.95, 0.93) * (amb * 1.4 + sunC * max(L.z, 0.25) * 0.9);
   c = mix(c, foamC, clamp(foam, 0.0, 1.0));
   float a = cover * mix(sheet, 1.0, smoothstep(0.3, 1.5, edgeN));
@@ -85,24 +84,29 @@ ${SEA_GLSL}
 #if BIOME == 0
 #define RAKE_F 3.4
 #define RING_F 2.9
-float rakeProf(float v) {
+float gFw = 0.0; // world units per pixel (set in main) for pattern anti-aliasing
+float rakeProf(float v, float F) {
   float s = abs(fract(v) - 0.5) * 2.0;           // 0 at tine groove, 1 at crest
-  float h = 1.0 - pow(1.0 - s, 2.2);             // narrow rounded groove, broad crest
-  return h;
+  s = (sqrt(s * s + 0.015) - 0.1225) / 0.885;    // round the tine bottom (no hard cusp)
+  float h = 1.0 - pow(max(1.0 - s, 0.0), 2.2);   // narrow rounded groove, broad crest
+  // band-limit: blend to a sine near the pixel scale, then fade toward the mean
+  float k = F * gFw;
+  h = mix(h, 0.5 + 0.5 * cos(6.2831853 * v), smoothstep(0.1, 0.22, k));
+  return mix(h, 0.6, smoothstep(0.28, 0.45, k));
 }
 vec2 pattern(vec2 p, vec4 nc) {
   float wob = 0.05 * sin(p.x * 0.55 + 1.3 * sin(p.y * 0.19)) + 0.1 * (vnoise(p * 0.3) - 0.5);
   float v = (p.y + wob) * RAKE_F;
   float id = floor(v);
   float amp = 0.82 + 0.3 * vnoise(vec2(p.x * 0.45, id * 3.1));
-  float h = rakeProf(v) * amp;
+  float h = rakeProf(v, RAKE_F) * amp;
   if (nc.w > 0.0) {
     float d = length(p - nc.xy);
     float r0 = nc.z + 0.1;
     float span = nc.w / RING_F;
     float wr = 1.0 - smoothstep(r0 + span - 0.05, r0 + span + 0.07, d);
     float ringv = (d - r0) * RING_F + 0.03 * sin(atan(p.y - nc.y, p.x - nc.x) * 3.0);
-    float rings = d < r0 ? 1.0 : rakeProf(ringv) * 0.95;
+    float rings = d < r0 ? 1.0 : rakeProf(ringv, RING_F) * 0.95;
     h = mix(h, rings, wr);
   }
   return vec2(h, 0.0);
@@ -114,8 +118,8 @@ vec2 pattern(vec2 p, vec4 nc) {
   float warp = 0.6 * vnoise(p * 0.22) + 0.25 * vnoise(p * 0.8 + 3.0);
   float v = dot(p, wd) * 1.6 + warp * 1.8 + 0.35 * sin(dot(p, pr) * 0.45) + 0.6 * vnoise(p * vec2(0.9, 0.3));
   float t = fract(v);
-  float h = t < 0.6 ? t / 0.6 : (1.0 - t) / 0.4;   // gentle stoss, steeper lee
-  h = h * h * (3.0 - 2.0 * h);
+  // gentle concave stoss, sharp crest line, steeper lee
+  float h = t < 0.64 ? pow(t / 0.64, 1.35) : pow((1.0 - t) / 0.36, 0.75);
   float amp = 0.45 + 0.6 * smoothstep(0.2, 0.8, vnoise(p * 0.3 + 9.0));
   // second, finer ripple set crossing at an angle
   float v2 = dot(p, normalize(wd + pr * 0.9)) * 3.6 + warp * 2.0;
@@ -141,15 +145,19 @@ vec2 pattern(vec2 p, vec4 nc) {
   return vec2(h * 0.45 + lumps, fbm3(p * 0.07) * 3.0);
 }
 #else
+// salar: the polygon rim pattern is evaluated once in main() with an analytic gradient
+vec3 gVor = vec3(1.0); vec2 gVorG = vec2(0.0);
 vec2 pattern(vec2 p, vec4 nc) {
-  vec3 v = voronoi(p * 0.62, 0.9);
-  float rim = exp(-sq(v.x / 0.045)) + 0.35 * exp(-sq(v.x / 0.12));
-  float dome = -0.25 * v.z;
   float micro = vnoise(p * 4.0) * 0.12;
-  return vec2(rim * 0.9 + dome + micro, fbm3(p * 0.09) * 0.6);
+  return vec2(micro, fbm3(p * 0.09) * 0.6);
+}
+float salarRim(float ed) { return exp(-sq(ed / 0.045)) + 0.35 * exp(-sq(ed / 0.12)); }
+float salarRimD(float ed) {
+  return exp(-sq(ed / 0.045)) * (-2.0 * ed / (0.045 * 0.045)) + 0.35 * exp(-sq(ed / 0.12)) * (-2.0 * ed / (0.12 * 0.12));
 }
 #endif
 
+vec3 gCrack = vec3(1.0);
 vec3 skyReflect(vec3 R, vec3 L) {
   float up = clamp(R.z, 0.0, 1.0);
   vec3 c = mix(uHorizon, uZenith, pow(up, 0.6));
@@ -158,6 +166,15 @@ vec3 skyReflect(vec3 R, vec3 L) {
   return c;
 }
 
+#if BIOME == 1
+#define GRAIN_MIX 0.45
+#elif BIOME == 4
+#define GRAIN_MIX 0.5
+#elif BIOME == 2
+#define GRAIN_MIX 0.7
+#else
+#define GRAIN_MIX 1.0
+#endif
 vec3 sampleAlbedo(vec2 p, float fw, float dist, float heightN) {
   // multi-scale grain colour with anti-aliasing fade
   float mottle = fbm3(p * 0.9);
@@ -172,14 +189,17 @@ vec3 sampleAlbedo(vec2 p, float fw, float dist, float heightN) {
   float gfade2 = 1.0 - smoothstep(0.3, 0.8, F2 * fw);
   vec3 grain2 = gh2.y > 0.93 ? uColC : (gh2.y < 0.06 ? uColB : base);
   vec3 avg = base * 0.9 + uColB * 0.06 + uColC * 0.04;
-  vec3 c = mix(avg, grain, gfade * 0.4);
-  c = mix(c, grain2, gfade2 * 0.18);
+  vec3 c = mix(avg, grain, gfade * 0.4 * GRAIN_MIX);
+  c = mix(c, grain2, gfade2 * 0.18 * GRAIN_MIX);
   return c;
 }
 
 void main() {
   vec2 p = vP;
   float fw = max(fwidth(p.x), 1e-4);
+#if BIOME == 0
+  gFw = fw;
+#endif
   vec2 duv = (p - uRegion.xy) / uRegion.zw;
   vec3 L = normalize(uSunDir);
 
@@ -220,6 +240,15 @@ void main() {
   float h0 = P0.x;
   vec2 dHi = vec2(Px.x - P0.x, Py.x - P0.x) / e;
   vec2 dLo = vec2(Px.y - P0.y, Py.y - P0.y) / e;
+#if BIOME == 4
+  gVor = voronoiG(p * 0.62, 0.9, gVorG);
+  {
+    float rimV = salarRim(gVor.x) * 0.9 - 0.25 * gVor.z;
+    vec2 cellDir = vec2(0.0); // dome slope is tiny; ignore its gradient
+    dHi += salarRimD(gVor.x) * 0.9 * gVorG * 0.62;
+    h0 += rimV;
+  }
+#endif
   vec2 grad = uPatAmp * (keep * dHi - (h0 - 0.5) * dG + dLo) + uDepth * dR;
 
   // ---------------------------------------------------------------- micro grain normals (AA)
@@ -241,7 +270,7 @@ void main() {
   // ---------------------------------------------------------------- albedo
   vec3 alb = sampleAlbedo(p, fw, 0.0, h0);
   // trail interior: compacted, slightly darker / smoother
-  float groove = smoothstep(-0.05, -0.6, D.r);
+  float groove = (1.0 - smoothstep(-0.6, -0.05, D.r));
   float berm = smoothstep(0.02, 0.3, D.r);
 #if BIOME == 0
   alb *= 1.0 - 0.06 * groove;
@@ -268,15 +297,16 @@ void main() {
   alb = mix(alb, vec3(0.08, 0.13, 0.06), step(0.955, og.z) * ofade * 0.8);
   // cracked crust where disturbed
   vec3 cr = voronoi(p * 3.4, 0.85);
+  gCrack = cr;
   float crack = (1.0 - smoothstep(0.015, 0.06, cr.x)) * smoothstep(0.15, 0.6, G);
   alb *= 1.0 - 0.55 * crack;
   alb *= mix(1.0, 0.55 + 0.3 * cr.y, G);
 #elif BIOME == 4
-  vec3 vv = voronoi(p * 0.62, 0.9);
+  vec3 vv = gVor;
   float rim = exp(-sq(vv.x / 0.05));
   alb *= 0.96 + 0.06 * rim;
   float moist = D.b;
-  alb = mix(alb, alb * vec3(0.38, 0.4, 0.44), moist * 0.9 * (1.0 - rim * 0.4));
+  alb = mix(alb, alb * vec3(0.3, 0.32, 0.36), moist * (1.0 - rim * 0.3));
   alb = mix(alb, alb * 0.9, groove * 0.4);
 #endif
 
@@ -297,7 +327,7 @@ void main() {
       float hS = texture2D(uDeform, duv + ldir * t / uRegion.zw).r * uDepth;
       occ = max(occ, hS - (hC + t * tanE));
     }
-    sunVis *= 1.0 - 0.85 * smoothstep(0.0, 0.035, occ);
+    sunVis *= 1.0 - 0.72 * smoothstep(0.0, 0.05, occ);
   }
   // frame: the sand sits below the frame lip -> rim shadow toward the sun + ambient occlusion
   vec2 ps = p + L.xy / max(L.z, 0.2) * uFrameH;
@@ -314,7 +344,7 @@ void main() {
   float leafA = texture2D(uCookie, cuv + swayA / uCookieRegion.zw).r;
   float leafB = texture2D(uCookie, cuv + swayB / uCookieRegion.zw).g;
   float leaf = max(leafA, leafB * 0.8);
-  sunVis *= 1.0 - 0.72 * leaf;
+  sunVis *= 1.0 - 0.8 * leaf;
 #if BIOME == 4
   float cloud = smoothstep(0.5, 0.75, fbm3(p * 0.045 + uTime * vec2(0.012, 0.005)));
   sunVis *= 1.0 - 0.4 * cloud;
@@ -383,7 +413,7 @@ void main() {
 #elif BIOME == 3
   {
     float heat = D.b;
-    vec3 cr2 = voronoi(p * 3.4, 0.85);
+    vec3 cr2 = gCrack;
     float crackE = 1.0 - smoothstep(0.0, 0.08, cr2.x);
     float pore = smoothstep(0.75, 0.95, vnoise(p * 11.0 + cr2.y * 7.0));
     float glowMask = crackE * 1.0 + pore * 0.35 * groove + 0.05 * groove * heat * heat;
@@ -398,10 +428,10 @@ void main() {
 #elif BIOME == 4
   {
     // thin water film mirroring the sky (clouds drift in the reflection)
-    vec3 vv2 = voronoi(p * 0.62, 0.9);
+    vec3 vv2 = gVor;
     float rimH = exp(-sq(vv2.x / 0.07));
     float film = smoothstep(0.36, 0.56, fbm3(p * 0.1 + 5.0)) * (1.0 - rimH * 0.85);
-    film = mix(film, 0.35, D.b);
+    film = mix(film, 0.12, D.b);
     vec3 Rv = reflect(-V, N);
     vec3 skyR = skyReflect(Rv, L);
     vec2 rp = p * 0.05 + Rv.xy * 0.8 + uTime * vec2(0.008, 0.003);
