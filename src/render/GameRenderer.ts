@@ -212,6 +212,8 @@ export class GameRenderer implements IGameRenderer {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.post.setSize(size.x, size.y);
     this.fitCamera();
+    // resizing clears the drawing buffer: redraw the last frame right away (no black flash)
+    if (this.lastFrame && !this.disposed) this.draw(this.lastFrame, true);
   }
 
   boardRect() {

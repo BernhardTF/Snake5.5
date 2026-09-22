@@ -10,6 +10,7 @@ import { NOISE_GLSL } from '../glsl/noise';
 const MAXSEG = 16;
 const MARGIN = 1.0;
 const COV_RES = 3; // coverage samples per cell
+const LAG = 0.5;   // main groove is carved this far behind the head (see ingest)
 
 export const SEG_GROOVE = 0, SEG_BUMP = 1, SEG_CRATER = 2, SEG_RING = 3;
 
@@ -311,18 +312,53 @@ export class DeformSim {
         const dl = Math.hypot(s.dirX, s.dirY) || 1;
         const dx = s.dirX / dl, dy = s.dirY / dl;
         this.push(hx + dx * halfW * 0.9, hy + dy * halfW * 0.9, dx, dy, halfW * 0.8, 0.3, 0, SEG_BUMP);
-        // trace the actual path via the body points (oldest -> newest so fresh carves win)
-        const n = Math.min(12, s.count - 1, Math.ceil(moved / Math.max(0.02, s.spacing)) + 1);
-        for (let i = n - 1; i >= 0; i--) {
-          const ax = s.points[(i + 1) * 2], ay = s.points[(i + 1) * 2 + 1];
-          const bx = s.points[i * 2], by = s.points[i * 2 + 1];
-          if (Math.hypot(bx - ax, by - ay) > 1) continue;
-          this.push(ax, ay, bx, by, halfW, depth, 0, SEG_GROOVE);
-        }
+        // The sim keeps the first few body points exact (sharp grid turns at the head), while the
+        // rest of the path is corner-smoothed. So the main groove is carved LAG units behind the
+        // head: the arc range [LAG, LAG + moved] (what passed the lag point this frame).
+        this.stampRange(s, LAG, LAG + moved + 0.04, halfW, depth);
+        // narrow, shallow head indentation from the head back to the lag point (the head visibly
+        // pushes in; small enough to stay inside the rounded groove at corners)
+        this.stampRange(s, 0, LAG + 0.02, halfW * 0.5, depth * 0.5);
       }
     }
     this.prevHead = [hx, hy];
   }
+
+  /** Stamp groove capsules along the body polyline between arc distances s0..s1 from the head. */
+  private stampRange(s: RenderFrame['snake'], s0: number, s1: number, w: number, depth: number) {
+    const pts = s.points, n = s.count;
+    if (n < 2 || s1 <= s0) return;
+    const tmp = this.tmpPath;
+    let k = 0;
+    let acc = 0;
+    let started = false;
+    for (let i = 0; i + 1 < n && k < tmp.length - 4; i++) {
+      const ax = pts[i * 2], ay = pts[i * 2 + 1], bx = pts[i * 2 + 2], by = pts[i * 2 + 3];
+      const L = Math.hypot(bx - ax, by - ay);
+      if (L > 1) { if (started) break; else { acc += L; continue; } } // wrap gap
+      const a0 = acc, a1 = acc + L;
+      acc = a1;
+      if (a1 < s0) continue;
+      if (!started) {
+        const t = L > 0 ? (s0 - a0) / L : 0;
+        tmp[k++] = ax + (bx - ax) * t; tmp[k++] = ay + (by - ay) * t;
+        started = true;
+      }
+      if (a1 >= s1) {
+        const t = L > 0 ? (s1 - a0) / L : 1;
+        tmp[k++] = ax + (bx - ax) * t; tmp[k++] = ay + (by - ay) * t;
+        break;
+      }
+      tmp[k++] = bx; tmp[k++] = by;
+    }
+    // emit oldest (farthest from head) -> newest so fresh carves win
+    for (let j = k - 2; j >= 2; j -= 2) {
+      const ax = tmp[j], ay = tmp[j + 1], bx = tmp[j - 2], by = tmp[j - 1];
+      if (Math.hypot(bx - ax, by - ay) < 1e-5 && k > 4) continue;
+      this.push(ax, ay, bx, by, w, depth, 0, SEG_GROOVE);
+    }
+  }
+  private tmpPath = new Float32Array(40);
 
   private updateWaves(dt: number) {
     if (!this.biome.sim.waves) { this.wave.set(1e3, 0, 0, 0); return; }

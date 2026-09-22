@@ -22,8 +22,10 @@ vec3 waterShade(vec3 under, vec2 p, float edgeN, float t, float sheet, vec3 amb,
   vec3 g = gnoised(p * vec2(1.3, 2.4) + vec2(t * 0.3, t * 0.55));
   vec3 g2 = gnoised(p * vec2(3.1, 5.3) - vec2(t * 0.5, t * 0.8));
   vec3 wn = normalize(vec3(-(g.yz * 0.07 + g2.yz * 0.035) * (0.3 + depth), 1.0));
-  vec3 vc = voronoi(p * 2.2 + vec2(t * 0.2, t * 0.35) + g.yz * 0.25, 1.0);
-  float caus = (1.0 - smoothstep(0.0, 0.16, vc.x)) * (1.0 - depth) * smoothstep(0.1, 0.6, edgeN);
+  // soft caustics from two drifting ridged noises (no cell pattern)
+  float c1 = 1.0 - abs(gnoise(p * 1.9 + g.yz * 0.35 + vec2(t * 0.21, t * 0.33)));
+  float c2 = 1.0 - abs(gnoise(p * 2.7 - g.yz * 0.3 + vec2(-t * 0.17, t * 0.29) + 5.1));
+  float caus = pow(c1 * c2, 6.0) * (1.0 - depth) * smoothstep(0.1, 0.6, edgeN);
   vec3 absorb = mix(vec3(0.88, 0.98, 0.97), vec3(0.25, 0.62, 0.6), smoothstep(0.0, 0.8, depth));
   vec3 c = under * absorb + sunC * caus * 0.035;
   vec3 deep = vec3(0.01, 0.16, 0.17) * (amb * 1.5 + sunC * 0.45);
@@ -34,13 +36,28 @@ vec3 waterShade(vec3 under, vec2 p, float edgeN, float t, float sheet, vec3 amb,
   float fres = 0.03 + 0.08 * depth + 0.9 * pow(1.0 - up, 2.0);
   c = mix(c, sky, clamp(fres, 0.0, 0.5));
   c += sunC * (pow(max(dot(R, L), 0.0), 60.0) * 1.2 + pow(max(dot(R, L), 0.0), 8.0) * 0.06);
-  // foam: crisp leading line + bubbly lace trailing behind it
-  vec3 vf = voronoi(p * vec2(5.0, 7.0) + vec2(0.0, t * 0.12) + g.yz * 0.15, 1.0);
-  float bubbles = smoothstep(0.18, 0.42, vf.z);
-  float blot = smoothstep(0.35, 0.7, fbm3(p * vec2(1.6, 3.2) + vec2(t * 0.15, -t * 0.25)));
-  float lace = bubbles * blot;
-  float line = exp(-sq((edgeN - 0.04) / 0.05)) * (0.8 + 0.2 * g2.x);
-  float foam = max(line, lace * exp(-max(edgeN, 0.0) / 0.45) * smoothstep(-0.02, 0.1, edgeN));
+  // foam: shore-break whitewater + thin lacy streaks that run along the wave fronts.
+  // Coordinates are stretched along the shoreline (x) and compressed across it (edge distance),
+  // so ridges of the noise read as foam lines following the swash; density falls off offshore.
+  float e = max(edgeN, 0.0);
+  vec2 fq = vec2(p.x * 0.55, e * 2.6 - t * 0.35);
+  vec2 fw = vec2(gnoise(fq * 1.3 + vec2(3.7, t * 0.12)), gnoise(fq * 1.1 - vec2(1.9, t * 0.1))) * 0.55;
+  float r1 = 1.0 - abs(gnoise(fq + fw));
+  float r2 = 1.0 - abs(gnoise(fq * vec2(2.1, 1.7) - fw * 1.3 + 7.3));
+  float r3 = 1.0 - abs(gnoise(fq * vec2(4.3, 3.1) + fw * 2.0 + 13.1));
+  float dens = exp(-e / 0.55);                                   // dense at the shore break
+  float band = exp(-sq((e - 1.6 - 0.25 * sin(t * 0.4)) / 0.5)) * 0.45; // an offshore breaker line
+  float thick = 0.03 + 0.09 * dens + 0.04 * band;
+  float lace = smoothstep(1.0 - thick, 1.0 - thick * 0.25, r1) * (0.55 + 0.45 * dens)
+             + smoothstep(1.0 - thick * 0.8, 1.0 - thick * 0.2, r2) * (0.35 + 0.5 * dens)
+             + smoothstep(1.0 - thick * 0.6, 1.0, r3) * dens * 0.5;
+  // break the lines up so they fade into patches and streaks
+  float patchy = smoothstep(0.3, 0.75, fbm3(vec2(p.x * 0.35, e * 0.9) + vec2(t * 0.05, -t * 0.12)));
+  lace *= mix(patchy, 1.0, dens * 0.6) * clamp(dens + band + 0.08, 0.0, 1.0);
+  float white = exp(-e / 0.16) * (0.65 + 0.35 * r2);            // churned whitewater right at the edge
+  float line = exp(-sq((edgeN - 0.04) / 0.045)) * (0.8 + 0.2 * r1);
+  float foam = max(max(line, white), clamp(lace, 0.0, 1.0)) * smoothstep(-0.02, 0.06, edgeN);
+  foam = max(foam, line * 0.9);
   vec3 foamC = vec3(0.96, 0.95, 0.93) * (amb * 1.4 + sunC * max(L.z, 0.25) * 0.9);
   c = mix(c, foamC, clamp(foam, 0.0, 1.0));
   float a = cover * mix(sheet, 1.0, smoothstep(0.3, 1.5, edgeN));
@@ -399,8 +416,8 @@ void main() {
     float spec = pow(max(dot(N, Hh), 0.0), mix(14.0, 40.0, wet)) * mix(0.1, 0.9, wet);
     col += uSunColor * spec * sunVis * 0.5;
     // residual foam lace
-    vec3 lv = voronoi(p * vec2(4.5, 6.5), 0.9);
-    float lace = 1.0 - smoothstep(0.02, 0.08, lv.x);
+    float rl = 1.0 - abs(gnoise(vec2(p.x * 0.9, p.y * 3.2) + vec2(gnoise(p * 0.7), 0.0) * 0.6));
+    float lace = smoothstep(0.9, 0.98, rl);
     col = mix(col, vec3(0.95, 0.93, 0.9) * (amb * 1.3 + uSunColor * 0.5), clamp(D.a, 0.0, 1.0) * lace * 0.7);
     // water sheet (idle swash + surges)
     float dd = p.y - uWave.x;
