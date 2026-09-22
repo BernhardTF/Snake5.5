@@ -135,7 +135,7 @@ export class App implements UIHost {
     const w = innerWidth, h = innerHeight;
     const aspect = Math.max(w, h) / Math.max(1, Math.min(w, h));
     const short = 18;
-    const long = Math.max(short, Math.min(34, Math.round(short * aspect * 0.96)));
+    const long = Math.max(short, Math.min(38, Math.round(short * aspect * 0.97)));
     if (w >= h) {
       this.boardW = long;
       this.boardH = short;
