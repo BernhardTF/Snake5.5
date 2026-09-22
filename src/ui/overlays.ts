@@ -78,7 +78,12 @@ export class Countdown {
   readonly el = h('div', { class: 'countdown', 'aria-live': 'assertive' });
   private token = 0;
 
-  constructor(private sound: (s: 'countdown' | 'go') => void, private reducedMotion: () => boolean) {}
+  /** `active()` false (e.g. paused) freezes the countdown on the current number until it is true again. */
+  constructor(
+    private sound: (s: 'countdown' | 'go') => void,
+    private reducedMotion: () => boolean,
+    private active: () => boolean = () => true,
+  ) {}
 
   run(): Promise<void> {
     const my = ++this.token;
@@ -89,6 +94,13 @@ export class Countdown {
       let i = 0;
       const tick = () => {
         if (my !== this.token) return resolve();
+        if (!this.active()) {
+          // frozen (paused): hide and wait, then replay the current number
+          this.el.hidden = true;
+          window.setTimeout(tick, 120);
+          return;
+        }
+        this.el.hidden = false;
         if (i >= steps.length) {
           this.el.hidden = true;
           this.el.replaceChildren();

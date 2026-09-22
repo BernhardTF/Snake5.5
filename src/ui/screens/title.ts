@@ -101,7 +101,11 @@ export function buildTitle(ctx: ScreenCtx): Screen {
       el.classList.remove('awaiting');
       el.classList.add('revealed');
       scr.focus = play;
-      requestAnimationFrame(() => play.focus({ preventScroll: true }));
+      const tryFocus = (n: number) => {
+        play.focus({ preventScroll: true });
+        if (document.activeElement !== play && n > 0) setTimeout(() => tryFocus(n - 1), 60);
+      };
+      requestAnimationFrame(() => tryFocus(8));
     });
   }
   return scr;

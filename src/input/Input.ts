@@ -166,7 +166,7 @@ export class Input {
     if (!pad) return;
     const pressed = pad.buttons.map((b) => b.pressed);
     const edge = (i: number) => pressed[i] && !this.padPrev[i];
-    if (edge(9)) this.sink.pause(); // Start
+    // Start (pause/resume) is handled by the UI's gamepad navigation.
     if (this.active()) {
       // D-pad: 12 up, 13 down, 14 left, 15 right
       const dp: [number, Dir][] = [[12, 0], [15, 1], [13, 2], [14, 3]];

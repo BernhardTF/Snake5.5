@@ -1,5 +1,4 @@
 /* index.html only requests upright Cormorant; the UI's calligraphic lines need the true italic. */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&display=swap');
 
 /* ==========================================================================
    Serpent Sands — UI styles. "Ink, paper and gold."
@@ -958,6 +957,10 @@ body {
   white-space: nowrap;
   position: relative;
   z-index: 1;
+}
+.biome-local.long {
+  font-size: 19px;
+  letter-spacing: 0.03em;
 }
 .biome-meta {
   display: flex;
@@ -1977,6 +1980,7 @@ body {
 }
 .kr-head span {
   display: inline-flex;
+  justify-self: start;
   align-items: center;
   gap: 6px;
 }
@@ -2796,7 +2800,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-width: 118px;
+  min-width: 132px;
   padding: 5px 12px 7px 8px;
   border-radius: 999px;
   background: rgba(22, 16, 11, 0.56);
@@ -2867,7 +2871,7 @@ kbd {
     top: calc(var(--top) + 76px * var(--hs));
   }
   .hud.is-ta .hud-fx {
-    top: calc(var(--top) + 98px * var(--hs));
+    top: calc(var(--top) + 146px * var(--hs));
   }
   .hud-score {
     font-size: 34px;
@@ -2890,53 +2894,60 @@ kbd {
   font-weight: 700;
   font-size: 18px;
   color: var(--paper);
+  /* crisp ink outline so pale text survives bright sand */
+  -webkit-text-stroke: 4px rgba(24, 14, 5, 0.62);
+  paint-order: stroke fill;
   text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.6),
-    0 0 14px rgba(0, 0, 0, 0.35);
+    0 2px 3px rgba(20, 12, 4, 0.55),
+    0 0 18px rgba(20, 12, 4, 0.35);
 }
 .pop-score {
   font-family: var(--display);
-  font-size: 28px;
+  font-size: 30px;
   font-feature-settings: 'lnum' 1;
-  color: #fff6de;
+  color: #fff7e2;
 }
 .pop-combo {
   font-family: var(--display);
   font-style: italic;
-  font-size: 40px;
+  font-size: 44px;
   font-feature-settings: 'lnum' 1;
-  color: var(--gold-2);
+  color: #f7d98a;
+  -webkit-text-stroke: 5px rgba(50, 28, 4, 0.7);
   text-shadow:
-    0 1px 2px rgba(60, 35, 5, 0.7),
-    0 0 22px rgba(216, 178, 90, 0.75);
+    0 2px 3px rgba(40, 22, 2, 0.55),
+    0 0 26px rgba(216, 178, 90, 0.6);
 }
 .pop-near {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.2em;
-  color: #c9ecff;
+  color: #d4f0ff;
+  -webkit-text-stroke: 3px rgba(4, 22, 40, 0.72);
   text-shadow:
-    0 1px 2px rgba(0, 20, 40, 0.8),
-    0 0 12px rgba(100, 190, 255, 0.55);
+    0 1px 2px rgba(0, 20, 40, 0.6),
+    0 0 14px rgba(100, 190, 255, 0.5);
 }
 .pop-bonus {
   font-family: var(--display);
   font-size: 34px;
+  font-feature-settings: 'lnum' 1;
   letter-spacing: 0.04em;
-  color: var(--gold-2);
+  color: #f7d98a;
+  -webkit-text-stroke: 5px rgba(50, 28, 4, 0.7);
   text-shadow:
-    0 1px 2px rgba(60, 35, 5, 0.7),
-    0 0 24px rgba(216, 178, 90, 0.7);
+    0 2px 3px rgba(40, 22, 2, 0.55),
+    0 0 24px rgba(216, 178, 90, 0.55);
 }
 .pop-warn {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #ff9a85;
+  letter-spacing: 0.08em;
+  color: #ffb1a1;
+  -webkit-text-stroke: 3px rgba(60, 6, 0, 0.7);
   text-shadow:
-    0 1px 2px rgba(40, 0, 0, 0.8),
-    0 0 14px rgba(255, 80, 50, 0.55);
+    0 1px 2px rgba(40, 0, 0, 0.6),
+    0 0 14px rgba(255, 80, 50, 0.5);
 }
 .large-hud .pop {
   font-size: 22px;
@@ -3040,13 +3051,16 @@ kbd {
   line-height: 1;
   font-feature-settings: 'lnum' 1;
   color: var(--paper);
+  -webkit-text-stroke: 7px rgba(24, 14, 5, 0.5);
+  paint-order: stroke fill;
   text-shadow:
-    0 3px 6px rgba(40, 24, 8, 0.4),
-    0 10px 60px rgba(20, 12, 4, 0.45),
+    0 3px 6px rgba(40, 24, 8, 0.45),
+    0 10px 60px rgba(20, 12, 4, 0.5),
     0 0 80px rgba(216, 178, 90, 0.35);
 }
 .cd-go {
   font-style: italic;
+  -webkit-text-stroke-color: rgba(50, 28, 4, 0.6);
   letter-spacing: 0.04em;
   color: var(--gold-2);
   font-size: clamp(100px, 24vmin, 220px);
@@ -3201,15 +3215,9 @@ kbd {
 .ss-ui.rm *,
 .ss-ui.rm *::before,
 .ss-ui.rm *::after {
-  animation-duration: 1ms !important;
-  animation-delay: 0ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 1ms !important;
-  scroll-behavior: auto !important;
-}
-.ss-ui.rm .hint-key {
   animation: none !important;
-  opacity: 1;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
 
 /* Low quality / weak GPUs: no backdrop blur (it re-blurs the live WebGL scene every frame). */

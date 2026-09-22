@@ -13,7 +13,7 @@ function glyphHourglass() {
   for (let i = 0; i <= 20; i++) {
     const t = i / 20; // 0..1 along length
     const y = (t - 0.5) * 0.36;
-    const r = 0.018 + 0.1 * Math.pow(Math.abs(Math.sin(t * Math.PI)), 0.8) * (1 - 0.85 * Math.exp(-((t - 0.5) / 0.08) ** 2));
+    const r = 0.018 + 0.1 * Math.pow(Math.abs(Math.sin(t * Math.PI)), 0.8) * (1 - 0.85 * Math.exp(-(((t - 0.5) / 0.08) ** 2)));
     prof.push(new THREE.Vector2(r, y));
   }
   const glass = new THREE.LatheGeometry(prof, 20);
@@ -110,15 +110,15 @@ function glyphDouble() {
   const relief: THREE.BufferGeometry[] = [];
   const z = 0.03;
   for (const a of [Math.PI / 4, -Math.PI / 4]) {
-    const b = new THREE.BoxGeometry(0.11, 0.022, 0.02);
-    b.rotateZ(a); b.translate(-0.065, -0.005, z);
+    const b = new THREE.BoxGeometry(0.13, 0.026, 0.02);
+    b.rotateZ(a); b.translate(-0.075, -0.01, z);
     relief.push(prep(b));
   }
   const two: THREE.Vector3[] = [];
-  const P = (x: number, y: number) => two.push(new THREE.Vector3(0.055 + x * 0.1, y * 0.1, z));
+  const P = (x: number, y: number) => two.push(new THREE.Vector3(0.06 + x * 0.15, y * 0.15, z));
   for (let i = 0; i <= 10; i++) { const a = Math.PI * 0.95 - (i / 10) * Math.PI * 1.15; P(Math.cos(a) * 0.45, 0.45 + Math.sin(a) * 0.45); }
   P(-0.2, -0.3); P(-0.45, -0.7); P(0.0, -0.7); P(0.45, -0.7);
-  relief.push(prep(sweep(two, two.map(() => 0.016), 6, 0.8)));
+  relief.push(prep(sweep(two, two.map(() => 0.017), 6, 0.8)));
   const gold = new THREE.MeshPhysicalMaterial({ color: 0xffc83a, metalness: 1, roughness: 0.22, emissive: new THREE.Color('#ff9a10'), emissiveIntensity: 0.35 });
   return {
     parts: [
@@ -162,6 +162,7 @@ export function powerupTemplate(kind: PowerupKind): THREE.Group {
   const root = new THREE.Group();
   const glyph = new THREE.Group();
   glyph.name = 'glyph';
+  glyph.scale.setScalar(1.45);
   for (const p of g.parts) {
     const m = new THREE.Mesh(p.geo, p.mat);
     m.castShadow = true;

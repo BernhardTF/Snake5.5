@@ -19,7 +19,7 @@ function petal(opts: {
     const t = i / nu;
     for (let j = 0; j <= nv; j++) {
       const v = (j / nv) * 2 - 1;
-      const L = (0.72 + 0.28 * Math.sqrt(Math.max(0, 1 - v * v))) - opts.notch * Math.exp(-(v / 0.22) ** 2);
+      const L = (0.72 + 0.28 * Math.sqrt(Math.max(0, 1 - v * v))) - opts.notch * Math.exp(-((v / 0.22) ** 2));
       const W = (opts.baseW ?? 0.06) + (1 - (opts.baseW ?? 0.06)) * Math.pow(Math.sin(Math.min(1, t / 0.72) * Math.PI / 2), 0.9);
       const x = t * L * opts.len;
       const y = v * W * opts.width * 0.5;
@@ -109,7 +109,7 @@ function sakura(): THREE.Group {
   const geos: THREE.BufferGeometry[] = [];
   for (let k = 0; k < 5; k++) {
     const g = petal({
-      len: 0.34, width: 0.3, notch: 0.16, cup: 0.35, seed: k + 3, ruffle: 0.015,
+      len: 0.3, width: 0.29, notch: 0.16, cup: 0.2, seed: k + 3, ruffle: 0.015,
       color: (t, v) => {
         let c = lerpC(base, mid, t * 1.3);
         c = lerpC(c, tip, Math.pow(Math.abs(v), 3) * t + Math.max(0, t - 0.85) * 2);
@@ -118,7 +118,7 @@ function sakura(): THREE.Group {
         return c;
       },
     });
-    geos.push(rotZ(g, (k / 5) * Math.PI * 2 + 0.2, 0.25, 0.04));
+    geos.push(rotZ(g, (k / 5) * Math.PI * 2 + 0.2, 0.12, 0.04));
   }
   grp.add(mesh(merge(geos), M.petal, 'petal'));
   // stamens
@@ -293,52 +293,73 @@ function emberCrystal(): THREE.Group {
 function kantuta(): THREE.Group {
   const M = sharedMats();
   const grp = new THREE.Group();
+  const L = 0.3;
   const prof: THREE.Vector2[] = [];
-  const N = 14;
+  const N = 16;
   for (let i = 0; i <= N; i++) {
     const t = i / N;
-    const r = 0.018 + 0.03 * Math.pow(t, 1.8) + (t > 0.85 ? (t - 0.85) * 0.25 : 0);
-    prof.push(new THREE.Vector2(r, t * 0.3));
+    let r = 0.02 + 0.03 * Math.pow(t, 1.6);
+    if (t > 0.78) r += Math.pow((t - 0.78) / 0.22, 1.5) * 0.06;
+    prof.push(new THREE.Vector2(r, t * L));
   }
   const flowers: THREE.BufferGeometry[] = [];
   const stam: THREE.BufferGeometry[] = [];
-  const cols = [['#e8c43a', '#d8182e', '#ff3a6a'], ['#d8d040', '#c81a4a', '#e0306a'], ['#b8d040', '#e0203a', '#ff5a5a'], ['#e8c43a', '#d02a60', '#ff4a8a']];
+  const pal = [['#e8c43a', '#d8182e', '#ff2a5a'], ['#d8d040', '#c01a3a', '#e02a6a'], ['#c8d040', '#e0203a', '#ff4a5a'], ['#e8c43a', '#c8185a', '#ff3a8a'], ['#d8c83a', '#d81a2a', '#ff5a4a']];
   const r = rng(12);
-  for (let k = 0; k < 4; k++) {
-    const g = new THREE.LatheGeometry(prof, 14);
+  const count = 5;
+  for (let k = 0; k < count; k++) {
+    let g: THREE.BufferGeometry = new THREE.LatheGeometry(prof, 20);
     const p = g.getAttribute('position');
     const cc: number[] = [];
-    const [c0, c1, c2] = cols[k].map(C);
+    const [c0, c1, c2] = pal[k].map(C);
+    const throat = C('#ffe060');
     for (let i = 0; i < p.count; i++) {
-      const t = p.getY(i) / 0.3;
-      const c = t < 0.2 ? lerpC(c0, c1, t / 0.2) : lerpC(c1, c2, (t - 0.2) / 0.8);
+      const y = p.getY(i), t = y / L;
+      const x = p.getX(i), z = p.getZ(i);
+      const ang = Math.atan2(z, x);
+      if (t > 0.78) {
+        const lobe = 1 + 0.35 * Math.cos(ang * 5) * (t - 0.78) / 0.22;
+        p.setX(i, x * lobe); p.setZ(i, z * lobe);
+        p.setY(i, y - 0.03 * Math.pow((t - 0.78) / 0.22, 2) * (1 - Math.cos(ang * 5)) * 0.5);
+      }
+      let c = t < 0.18 ? lerpC(c0, c1, t / 0.18) : lerpC(c1, c2, (t - 0.18) / 0.7);
+      if (t > 0.9) c = lerpC(c, c2.clone().multiplyScalar(1.1), 1);
       cc.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
-    const a = (k / 4) * Math.PI * 2 + 0.3 + r() * 0.3;
+    g.deleteAttribute('uv');
+    g.computeVertexNormals();
+    const a = (k / count) * Math.PI * 2 + (r() - 0.5) * 0.5;
+    const len = 0.85 + r() * 0.3;
+    g.scale(len, len, len);
     g.rotateZ(-Math.PI / 2); // along +x
-    g.rotateY(-0.2);
-    g.translate(0.02, 0, 0.05);
+    g.rotateY(-0.25);
+    g.translate(0.03, 0, 0.05);
     g.rotateZ(a);
     flowers.push(g);
-    for (let s = 0; s < 4; s++) {
-      const sph = new THREE.SphereGeometry(0.008, 5, 4);
-      const d = 0.31 + r() * 0.02;
-      sph.translate(d, (r() - 0.5) * 0.03, 0.1 + (r() - 0.5) * 0.02);
-      sph.rotateZ(a);
+    // throat disc + stamens
+    const th = new THREE.CircleGeometry(0.045, 12);
+    th.rotateY(Math.PI / 2); th.translate(L * len * 0.97, 0, 0);
+    th.rotateY(-0.25); th.translate(0.03, 0, 0.05); th.rotateZ(a);
+    stam.push(prep(th, throat));
+    for (let s2 = 0; s2 < 4; s2++) {
+      const sph = new THREE.SphereGeometry(0.01, 5, 4);
+      sph.translate(L * len + 0.01 + r() * 0.02, (r() - 0.5) * 0.04, (r() - 0.5) * 0.04);
+      sph.rotateY(-0.25); sph.translate(0.03, 0, 0.05); sph.rotateZ(a);
       stam.push(prep(sph, C('#fff08a')));
     }
   }
   const fl = merge(flowers.map((g) => { const o = prep(g); o.setAttribute('color', g.getAttribute('color')); return o; }));
   grp.add(mesh(fl, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, sheen: 0.8, sheenColor: new THREE.Color(1, 0.7, 0.8), side: THREE.DoubleSide }), 'petal'));
   grp.add(mesh(merge(stam), M.glossy, 'anther'));
-  // leaves
   const lv: THREE.BufferGeometry[] = [];
-  for (let k = 0; k < 3; k++) {
-    const l = petal({ len: 0.16, width: 0.06, notch: 0, cup: 0.1, nu: 6, nv: 4, color: () => C('#4a7a3a') });
-    lv.push(rotZ(l, (k / 3) * Math.PI * 2 + 1.1, 0.1, 0.03));
+  for (let k = 0; k < 4; k++) {
+    const l = petal({ len: 0.2, width: 0.08, notch: 0, cup: 0.1, nu: 6, nv: 4, color: (t) => lerpC(C('#3a6a2a'), C('#6a9a3a'), t) });
+    lv.push(rotZ(l, (k / 4) * Math.PI * 2 + 0.95, 0.1, 0.015));
   }
   grp.add(mesh(merge(lv), M.petal, 'leaf'));
+  const cal = new THREE.SphereGeometry(0.05, 10, 6); cal.scale(1, 1, 0.6); cal.translate(0, 0, 0.05);
+  grp.add(mesh(prep(cal, C('#5a8a3a')), M.matte, 'center'));
   return grp;
 }
 

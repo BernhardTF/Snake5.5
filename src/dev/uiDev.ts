@@ -305,11 +305,15 @@ export function runUiDev(params: URLSearchParams) {
     feed(true);
     if (params.get('countdown') === '1') void ui.countdown();
     setTimeout(() => ui.toast('Rhythm', 'Reach a ×4 combo.', '✦'), 900);
-    setTimeout(() => {
-      ui.popup('NEAR MISS +5', innerWidth * 0.45, innerHeight * 0.6, 'near');
+    const burst = () => {
+      if (ui.current !== 'hud') return;
+      ui.popup('NEAR MISS +5', innerWidth * 0.42, innerHeight * 0.62, 'near');
       ui.popup('LENGTH 10 · +100', innerWidth * 0.5, innerHeight * 0.3, 'bonus');
-      ui.popup('−10 s', innerWidth * 0.5, innerHeight * 0.7, 'warn');
-    }, 1150);
+      ui.popup('×4', innerWidth * 0.7, innerHeight * 0.45, 'combo');
+      if (hudMode === 'timeattack') ui.popup('−10 s', innerWidth * 0.5, innerHeight * 0.75, 'warn');
+    };
+    setTimeout(burst, 700);
+    setInterval(burst, 1400);
     if (screen === 'pause') setTimeout(() => ui.show('pause'), 400);
   } else if (screen === 'over') {
     ui.showResult(result);

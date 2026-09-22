@@ -76,7 +76,7 @@ export function buildSetup(ctx: ScreenCtx): Screen {
       h(
         'span',
         { class: 'biome-art', style: { background: b.cardGradient } },
-        h('span', { class: 'biome-local' }, b.localName),
+        h('span', { class: `biome-local${b.localName.length > 9 ? ' long' : ''}` }, b.localName),
         unlocked ? null : h('span', { class: 'biome-lock' }, icon(ICONS.lock), h('span', null, `Reach level ${b.unlockLevel}`)),
       ),
       h(

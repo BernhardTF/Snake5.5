@@ -41,7 +41,9 @@ export function spatialNext(root: HTMLElement, from: HTMLElement | null, dir: Di
       if (!centerOk) continue;
       // interval distance on the orthogonal axis (0 when overlapping)
       orth = Math.max(0, Math.max(a.top, b.top) - Math.min(a.bottom, b.bottom));
-      if (orth > 0) orth += Math.abs(bcy - acy) * 0.25;
+      // horizontal moves stay within the row: skip anything that does not share vertical extent
+      if (orth > 0) continue;
+      orth = Math.abs(bcy - acy) * 0.1;
     } else {
       primary = dir === 'down' ? b.top - a.bottom : a.top - b.bottom;
       const centerOk = dir === 'down' ? bcy > acy + 1 : bcy < acy - 1;

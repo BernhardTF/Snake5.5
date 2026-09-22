@@ -91,16 +91,16 @@ vec2 pattern(vec2 p, vec4 nc) {
   vec2 wd = normalize(uWind);
   vec2 pr = vec2(-wd.y, wd.x);
   float warp = 0.6 * vnoise(p * 0.22) + 0.25 * vnoise(p * 0.8 + 3.0);
-  float v = dot(p, wd) * 1.75 + warp * 1.6 + 0.35 * sin(dot(p, pr) * 0.45);
+  float v = dot(p, wd) * 1.6 + warp * 1.8 + 0.35 * sin(dot(p, pr) * 0.45) + 0.6 * vnoise(p * vec2(0.9, 0.3));
   float t = fract(v);
-  float h = t < 0.76 ? t / 0.76 : (1.0 - t) / 0.24;   // gentle stoss, steep lee
-  h = smoothstep(0.0, 1.0, h);
-  float amp = 0.7 + 0.4 * vnoise(p * 0.35 + 9.0);
+  float h = t < 0.72 ? t / 0.72 : (1.0 - t) / 0.28;   // gentle stoss, steep lee
+  h = h * h * (3.0 - 2.0 * h);
+  float amp = 0.45 + 0.6 * smoothstep(0.2, 0.8, vnoise(p * 0.3 + 9.0));
   // second, finer ripple set crossing at an angle
   float v2 = dot(p, normalize(wd + pr * 0.9)) * 3.6 + warp * 2.0;
   float h2 = 0.5 + 0.5 * sin(v2 * 6.2831);
   float dune = fbm3(p * 0.055 + 2.0);
-  return vec2(h * amp + h2 * 0.18, dune * 9.0);
+  return vec2(h * amp + h2 * 0.12, dune * 22.0);
 }
 #elif BIOME == 2
 vec2 pattern(vec2 p, vec4 nc) {
@@ -129,6 +129,14 @@ vec2 pattern(vec2 p, vec4 nc) {
 }
 #endif
 
+vec3 skyReflect(vec3 R, vec3 L) {
+  float up = clamp(R.z, 0.0, 1.0);
+  vec3 c = mix(uHorizon, uZenith, pow(up, 0.6));
+  float s = max(dot(R, L), 0.0);
+  c += uSunColor * (pow(s, 12.0) * 0.5 + pow(s, 200.0) * 4.0);
+  return c;
+}
+
 vec3 sampleAlbedo(vec2 p, float fw, float dist, float heightN) {
   // multi-scale grain colour with anti-aliasing fade
   float mottle = fbm3(p * 0.9);
@@ -137,14 +145,14 @@ vec3 sampleAlbedo(vec2 p, float fw, float dist, float heightN) {
   vec2 gp = p * F;
   vec3 gh = hash32(floor(gp));
   float gfade = 1.0 - smoothstep(0.4, 1.0, F * fw);
-  vec3 grain = gh.x > 0.8 ? uColB : (gh.x < 0.14 ? uColC : base);
+  vec3 grain = gh.x > 0.8 ? uColB : (gh.x < 0.1 ? mix(base, uColC, 0.7) : base);
   float F2 = 9.0;
   vec3 gh2 = hash32(floor(p * F2 + 0.5));
   float gfade2 = 1.0 - smoothstep(0.3, 0.8, F2 * fw);
   vec3 grain2 = gh2.y > 0.93 ? uColC : (gh2.y < 0.06 ? uColB : base);
   vec3 avg = base * 0.9 + uColB * 0.06 + uColC * 0.04;
-  vec3 c = mix(avg, grain, gfade * 0.55);
-  c = mix(c, grain2, gfade2 * 0.35);
+  vec3 c = mix(avg, grain, gfade * 0.4);
+  c = mix(c, grain2, gfade2 * 0.18);
   return c;
 }
 
@@ -176,7 +184,7 @@ void main() {
   vec2 dR = vec2(De.r - Dw.r, Dn.r - Ds.r) / (2.0 * tw);
   vec2 dG = vec2(De.g - Dw.g, Dn.g - Ds.g) / (2.0 * tw);
   // cavity: compare with a wider neighbourhood
-  vec2 wx = tx * 5.0, wy = ty * 5.0;
+  vec2 wx = tx * 9.0, wy = ty * 9.0;
   float wideR = 0.25 * (texture2D(uDeform, duv + wx).r + texture2D(uDeform, duv - wx).r
                       + texture2D(uDeform, duv + wy).r + texture2D(uDeform, duv - wy).r);
   float cavity = D.r - wideR;
@@ -222,10 +230,10 @@ void main() {
   // drifting sand streaks (wind)
   vec2 wd = normalize(uWind);
   vec2 pr = vec2(-wd.y, wd.x);
-  float st = vnoise(vec2(dot(p, wd) * 0.35 - uTime * 0.9, dot(p, pr) * 2.6));
+  float st = vnoise(vec2(dot(p, wd) * 0.35 - uTime * 0.9, dot(p, pr) * 5.0));
   st *= vnoise(vec2(dot(p, wd) * 0.12 - uTime * 0.35, dot(p, pr) * 0.5));
   float streak = smoothstep(0.3, 0.6, st);
-  alb = mix(alb, uColB * 1.08, streak * 0.35);
+  alb = mix(alb, uColB * 1.05, streak * 0.16);
   alb *= 0.93 + 0.12 * smoothstep(0.35, 0.75, fbm3(p * 0.055 + 2.0));
 #elif BIOME == 2
   float wetBase = 0.55 + 0.45 * smoothstep(uBoard.y * 0.1, uBoard.y * 1.05, p.y);
@@ -255,7 +263,21 @@ void main() {
   vec2 sh = texture2D(uShadow, duv).rg;
   float sunVis = 1.0 - 0.82 * sh.r;
   float ao = 1.0 - 0.5 * sh.g;
-  ao *= clamp(1.0 + cavity * 0.75, 0.5, 1.12);
+  ao *= clamp(1.0 + cavity * 0.6, 0.55, 1.15);
+  sunVis *= 1.0 - 0.08 * groove;
+  // height-field self shadow from the deformation (grooves / berms) toward the sun
+  {
+    vec2 ldir = normalize(L.xy);
+    float tanE = L.z / max(length(L.xy), 1e-3);
+    float hC = D.r * uDepth;
+    float occ = 0.0;
+    for (int k = 1; k <= 5; k++) {
+      float t = float(k) * 0.055;
+      float hS = texture2D(uDeform, duv + ldir * t / uRegion.zw).r * uDepth;
+      occ = max(occ, hS - (hC + t * tanE));
+    }
+    sunVis *= 1.0 - 0.85 * smoothstep(0.0, 0.035, occ);
+  }
   // frame: the sand sits below the frame lip -> rim shadow toward the sun + ambient occlusion
   vec2 ps = p + L.xy / max(L.z, 0.2) * uFrameH;
   float inside = min(min(ps.x, uBoard.x - ps.x), min(ps.y, uBoard.y - ps.y));
@@ -271,7 +293,7 @@ void main() {
   float leafA = texture2D(uCookie, cuv + swayA / uCookieRegion.zw).r;
   float leafB = texture2D(uCookie, cuv + swayB / uCookieRegion.zw).g;
   float leaf = max(leafA, leafB * 0.8);
-  sunVis *= 1.0 - 0.6 * leaf;
+  sunVis *= 1.0 - 0.72 * leaf;
 #if BIOME == 4
   float cloud = smoothstep(0.5, 0.75, fbm3(p * 0.045 + uTime * vec2(0.012, 0.005)));
   sunVis *= 1.0 - 0.4 * cloud;
@@ -279,7 +301,7 @@ void main() {
 
   // ---------------------------------------------------------------- lighting
   float NdL = dot(N, L);
-  float wrap = 0.12;
+  float wrap = 0.04;
   float diff = max((NdL + wrap) / (1.0 + wrap), 0.0);
   vec3 amb = mix(uGroundColor, uSkyColor, N.z * 0.5 + 0.5);
 #if BIOME == 3
@@ -308,7 +330,7 @@ void main() {
 #elif BIOME == 2
   sparkAmt = 1.5;
 #elif BIOME == 3
-  sparkAmt = 2.5;
+  sparkAmt = 1.2;
 #else
   sparkAmt = 3.0;
 #endif
@@ -317,12 +339,13 @@ void main() {
   // ---------------------------------------------------------------- biome specials
 #if BIOME == 2
   {
-    // wet specular sheen + sky reflection
-    float rough = mix(0.35, 0.12, wet);
-    float spec = pow(max(dot(N, Hh), 0.0), mix(18.0, 90.0, wet)) * mix(0.15, 0.9, wet);
-    col += uSunColor * spec * sunVis * 0.45;
-    float fres = 0.08 + 0.3 * wet;
-    col = mix(col, uSkyColor * 1.2 + uHorizon * 0.2, fres * 0.35);
+    // wet sand: mirror-ish sky reflection driven by ripple normals + sun sheen
+    vec3 Rv = reflect(-V, N);
+    vec3 refl = skyReflect(Rv, L);
+    float fres = mix(0.1, 0.42, wet);
+    col = mix(col, refl, fres);
+    float spec = pow(max(dot(N, Hh), 0.0), mix(24.0, 140.0, wet)) * mix(0.1, 1.2, wet);
+    col += uSunColor * spec * sunVis * 0.6;
     // residual foam lace
     float lace = smoothstep(0.45, 0.75, vnoise(p * vec2(5.0, 13.0)) * 0.7 + vnoise(p * 21.0) * 0.4);
     col = mix(col, vec3(0.95, 0.93, 0.9) * (amb + uSunColor * 0.5), D.a * lace * 0.8);
@@ -349,28 +372,31 @@ void main() {
     float heat = D.b;
     vec3 cr2 = voronoi(p * 3.4, 0.85);
     float crackE = 1.0 - smoothstep(0.0, 0.08, cr2.x);
-    float glowMask = crackE * 1.6 + groove * 0.35 + 0.15 * vnoise(p * 9.0);
-    vec3 hot = mix(vec3(0.9, 0.12, 0.02), vec3(1.0, 0.62, 0.2), heat * heat);
-    float flick = 0.85 + 0.15 * sin(uTime * 3.0 + cr2.y * 30.0);
-    col += hot * pow(heat, 1.6) * glowMask * 4.0 * flick;
+    float pore = smoothstep(0.75, 0.95, vnoise(p * 11.0 + cr2.y * 7.0));
+    float glowMask = crackE * 1.0 + pore * 0.35 * groove + 0.05 * groove * heat * heat;
+    vec3 hot = mix(vec3(0.8, 0.1, 0.015), vec3(1.0, 0.55, 0.16), heat * heat);
+    float flick = 0.8 + 0.2 * sin(uTime * 2.3 + cr2.y * 30.0);
+    col += hot * pow(heat, 1.5) * glowMask * 5.0 * flick;
+    // aurora sheen on the glassy basalt grains
+    col += uAurora * band * 0.5 * pow(max(N.z, 0.0), 8.0);
     // obsidian-like faint sheen
     col += uSkyColor * pow(max(dot(N, Hh), 0.0), 40.0) * 0.15;
   }
 #elif BIOME == 4
   {
-    // thin water film mirroring the sky
+    // thin water film mirroring the sky (clouds drift in the reflection)
     vec3 vv2 = voronoi(p * 0.62, 0.9);
     float rimH = exp(-sq(vv2.x / 0.07));
-    float film = smoothstep(0.42, 0.62, fbm3(p * 0.11 + 5.0)) * (1.0 - rimH);
-    film = max(film, D.b * 0.55 * (1.0 - rimH));
-    vec2 rp = p * 0.06 + N.xy * 0.6 + uTime * vec2(0.01, 0.004);
-    float clouds = smoothstep(0.45, 0.8, fbm(rp * 2.0));
-    float grad = clamp(0.5 + 0.5 * sin(p.y * 0.05 + 1.0), 0.0, 1.0);
-    vec3 skyR = mix(uZenith, uHorizon, grad * 0.5);
-    skyR = mix(skyR, vec3(1.0, 1.0, 1.02) * 1.6, clouds * 0.85);
-    col = mix(col, skyR * 1.05, film * 0.72);
-    float spec = pow(max(dot(N, Hh), 0.0), 200.0) * film;
-    col += uSunColor * spec * 1.5 * sunVis;
+    float film = smoothstep(0.36, 0.56, fbm3(p * 0.1 + 5.0)) * (1.0 - rimH * 0.85);
+    film = max(film, D.b * 0.7 * (1.0 - rimH * 0.6));
+    vec3 Rv = reflect(-V, N);
+    vec3 skyR = skyReflect(Rv, L);
+    vec2 rp = p * 0.05 + Rv.xy * 0.8 + uTime * vec2(0.008, 0.003);
+    float clouds = smoothstep(0.42, 0.78, fbm(rp * 2.0));
+    skyR = mix(skyR, vec3(1.0, 1.0, 1.03) * 1.25, clouds * 0.8);
+    col = mix(col, skyR, film * 0.8);
+    float spec = pow(max(dot(N, Hh), 0.0), 220.0) * film;
+    col += uSunColor * spec * 2.0 * sunVis;
   }
 #endif
 

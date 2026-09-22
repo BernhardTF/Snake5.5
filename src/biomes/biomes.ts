@@ -38,7 +38,7 @@ export const BIOMES: BiomeInfo[] = [
   {
     id: 'erg',
     name: 'Erg Chebbi',
-    localName: 'ⴻⵔⴳ ⵛⴻⴱⴱⵉ',
+    localName: 'عرق الشبي',
     region: 'Sahara, Morocco',
     culture: 'Amazigh desert caravan',
     tagline: 'The wind keeps no secrets.',

@@ -69,13 +69,13 @@ void main() {
 #if BIOME == 0
   // maple cluster hanging over the top-right corner
   vec2 anchor = vec2(W + 1.5, H + 1.8);
-  for (int i = 0; i < 34; i++) {
+  for (int i = 0; i < 17; i++) {
     float fi = float(i);
     vec2 h = hash22(vec2(fi * 1.7, 3.1));
     float ang = mix(3.25, 4.75, h.x);
-    float rad = mix(1.2, 8.5, pow(h.y, 0.8));
+    float rad = mix(1.5, 9.0, pow(h.y, 0.8));
     vec2 c = anchor + vec2(cos(ang), sin(ang)) * rad + (hash22(vec2(fi, 9.0)) - 0.5) * 1.2;
-    float sz = mix(0.55, 0.95, hash12(vec2(fi, 4.2)));
+    float sz = mix(0.8, 1.35, hash12(vec2(fi, 4.2)));
     nearL = max(nearL, maple(p, c, sz, hash12(vec2(fi, 7.7)) * 6.28));
   }
   // twigs
@@ -166,7 +166,7 @@ export class Cookie {
     this.fsq.render(r, this.mats[biome], this.rt);
     // blur: near layer soft, far layer softer
     const u = this.blur.uniforms;
-    const rn = 0.16 / texel, rf = 0.3 / texel;
+    const rn = 0.045 / texel, rf = 0.08 / texel;
     for (let it = 0; it < 2; it++) {
       u.uTex.value = this.rt.texture;
       (u.uDirR.value as THREE.Vector2).set(rn / tw, 0);

@@ -72,7 +72,7 @@ export class UI implements IUI {
     this.hud = new Hud({ onPause: () => this.host.pause(), reducedMotion: rm });
     this.popups = new Popups(rm);
     this.toasts = new Toasts(rm);
-    this.cd = new Countdown((s) => this.host.sound(s), rm);
+    this.cd = new Countdown((s) => this.host.sound(s), rm, () => this.current === 'hud');
     this.touch = new TouchControls();
     this.fps = new FpsMeter();
     this.layerScreens = h('div', { class: 'layer-screens' });
@@ -406,7 +406,8 @@ export class UI implements IUI {
     const inside = cur && root.contains(cur) && cur !== document.body;
     if (!inside) {
       const def = (this.active && !this.dialog ? this.active.screen.focus : null) ?? focusables(root)[0];
-      if (def) def.focus({ preventScroll: false });
+      def?.focus({ preventScroll: false });
+      if (document.activeElement !== def) focusables(root)[0]?.focus({ preventScroll: false });
       return;
     }
     const next = spatialNext(root, cur, dir);

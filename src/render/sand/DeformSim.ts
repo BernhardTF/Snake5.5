@@ -90,13 +90,13 @@ void main() {
       float depth = P.y * (1.0 + rough * nz * 0.6);
       w *= 1.0 + rough * 0.25 * nz;
       float dn = dist / w;
-      float g = -depth * (1.0 - smoothstep(0.42, 1.0, dn));
+      float g = -depth * (1.0 - smoothstep(0.5, 0.95, dn));
       c.r = min(c.r, g);
       if (tu >= 0.0 && dn > 0.8) {
-        float berm = depth * 0.42 * exp(-sq((dn - 1.14) / 0.44));
+        float berm = depth * 0.45 * exp(-sq((dn - 1.12) / 0.3));
         c.r = max(c.r, berm);
       }
-      c.g = max(c.g, 1.0 - smoothstep(1.25, 1.75, dn));
+      c.g = max(c.g, 1.0 - smoothstep(1.12, 1.5, dn));
       c.b = max(c.b, uHeatSet * (1.0 - smoothstep(0.55, 1.05, dn)));
     } else if (type == 1) {
       float dist = length(p - A.xy);

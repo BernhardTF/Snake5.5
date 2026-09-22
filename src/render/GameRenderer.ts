@@ -169,7 +169,7 @@ export class GameRenderer implements IGameRenderer {
     (u.uHorizon.value as THREE.Color).copy(lin(v.env.horizon));
     (u.uWind.value as THREE.Vector2).set(v.sim.windX || 1, v.sim.windY || 0);
     u.uDepth.value = v.depthScale;
-    u.uPatAmp.value = ({ karesansui: 0.045, erg: 0.06, lagoon: 0.035, svartsandur: 0.04, salar: 0.03 } as const)[id];
+    u.uPatAmp.value = ({ karesansui: 0.055, erg: 0.05, lagoon: 0.035, svartsandur: 0.04, salar: 0.03 } as const)[id];
     this.frameU.uFrameH.value = ({ karesansui: 0.32, erg: 0.36, lagoon: 0.3, svartsandur: 0.42, salar: 0.14 } as const)[id];
     this.sim.setBiome(id);
     this.propsView.setBiome(id);
@@ -336,7 +336,7 @@ export class GameRenderer implements IGameRenderer {
       const k = (f.time / 12) % 3;
       const i0 = Math.floor(k), fr = k - i0;
       this.auroraC.copy(AURORA[i0]).lerp(AURORA[(i0 + 1) % 3], fr * fr * (3 - 2 * fr));
-      (this.sandU.uAurora.value as THREE.Color).copy(this.auroraC).multiplyScalar(0.12);
+      (this.sandU.uAurora.value as THREE.Color).copy(this.auroraC).multiplyScalar(0.45);
       LIGHT.skyColor.value.copy(this.baseSky).lerp(this.auroraC, 0.18);
     }
     this.env.sync(LIGHT.sunDir.value, LIGHT.sunColor.value, LIGHT.skyColor.value, LIGHT.groundColor.value, this.W / 2, this.H / 2);
