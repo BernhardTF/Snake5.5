@@ -15,17 +15,38 @@ void main() {
 
 /** Shared GLSL: sea colour (used by lagoon sand + frame). */
 export const SEA_GLSL = /* glsl */ `
-vec3 seaColor(vec2 p, float t, vec3 sky, vec3 sunC) {
-  float depth = clamp((p.y - uBoard.y) * 0.25, 0.0, 1.0);
-  vec3 shallow = vec3(0.10, 0.42, 0.44);
-  vec3 deep = vec3(0.03, 0.12, 0.22);
-  vec3 c = mix(shallow, deep, depth);
-  float w = gnoise(p * vec2(0.7, 1.6) + vec2(t * 0.25, t * 0.4)) + 0.5 * gnoise(p * vec2(1.7, 3.1) - vec2(t * 0.3, t * 0.7));
-  // sunset reflection streaks
-  float gl = pow(max(0.0, w * 0.5 + 0.5), 6.0);
-  c += vec3(1.0, 0.55, 0.35) * gl * 0.9 * (0.5 + depth);
-  c = mix(c, sky * 0.9, 0.25 + 0.2 * depth);
-  return c;
+// Shallow water over sand. edgeN = distance behind the leading edge (> 0 = under water).
+vec3 waterShade(vec3 under, vec2 p, float edgeN, float t, float sheet, vec3 amb, vec3 sunC, vec3 L, vec3 zen, vec3 hor) {
+  float cover = smoothstep(-0.02, 0.04, edgeN);
+  float depth = clamp(edgeN / 3.5, 0.0, 1.0);
+  vec3 g = gnoised(p * vec2(1.3, 2.4) + vec2(t * 0.3, t * 0.55));
+  vec3 g2 = gnoised(p * vec2(3.1, 5.3) - vec2(t * 0.5, t * 0.8));
+  vec3 wn = normalize(vec3(-(g.yz * 0.07 + g2.yz * 0.035) * (0.3 + depth), 1.0));
+  vec3 vc = voronoi(p * 2.2 + vec2(t * 0.2, t * 0.35) + g.yz * 0.25, 1.0);
+  float caus = (1.0 - smoothstep(0.0, 0.1, vc.x)) * (1.0 - depth) * smoothstep(0.05, 0.4, edgeN);
+  vec3 absorb = mix(vec3(0.88, 0.98, 0.97), vec3(0.25, 0.62, 0.6), smoothstep(0.0, 0.8, depth));
+  vec3 c = under * absorb + sunC * caus * 0.05;
+  vec3 deep = vec3(0.01, 0.16, 0.17) * (amb * 1.5 + sunC * 0.45);
+  c = mix(c, deep, smoothstep(0.25, 1.0, depth) * 0.9);
+  vec3 R = reflect(vec3(0.0, 0.0, -1.0), wn);
+  float up = clamp(R.z, 0.0, 1.0);
+  vec3 sky = mix(hor, zen, 0.5 * pow(up, 2.0));
+  float fres = 0.03 + 0.08 * depth + 0.9 * pow(1.0 - up, 2.0);
+  c = mix(c, sky, clamp(fres, 0.0, 0.5));
+  c += sunC * (pow(max(dot(R, L), 0.0), 60.0) * 1.2 + pow(max(dot(R, L), 0.0), 8.0) * 0.06);
+  // foam: crisp leading line + bubbly lace trailing behind it
+  vec3 vf = voronoi(p * vec2(5.0, 7.0) + vec2(0.0, t * 0.12) + g.yz * 0.15, 1.0);
+  float bubbles = smoothstep(0.18, 0.42, vf.z);
+  float blot = smoothstep(0.35, 0.7, fbm3(p * vec2(1.6, 3.2) + vec2(t * 0.15, -t * 0.25)));
+  float lace = bubbles * blot;
+  float line = exp(-sq((edgeN - 0.04) / 0.05)) * (0.8 + 0.2 * g2.x);
+  float foam = max(line, lace * exp(-max(edgeN, 0.0) / 0.45) * smoothstep(-0.02, 0.1, edgeN));
+  foam += bubbles * smoothstep(0.8, 0.95, vnoise(p * vec2(0.5, 2.5) + vec2(0.0, -t * 0.3))) * 0.2 * depth;
+  vec3 foamC = vec3(0.96, 0.95, 0.93) * (amb * 1.4 + sunC * max(L.z, 0.25) * 0.9);
+  c = mix(c, foamC, clamp(foam, 0.0, 1.0));
+  float a = cover * mix(sheet, 1.0, smoothstep(0.3, 1.5, edgeN));
+  a = max(a, clamp(line, 0.0, 1.0) * sheet);
+  return mix(under, c, a);
 }
 `;
 
@@ -93,14 +114,14 @@ vec2 pattern(vec2 p, vec4 nc) {
   float warp = 0.6 * vnoise(p * 0.22) + 0.25 * vnoise(p * 0.8 + 3.0);
   float v = dot(p, wd) * 1.6 + warp * 1.8 + 0.35 * sin(dot(p, pr) * 0.45) + 0.6 * vnoise(p * vec2(0.9, 0.3));
   float t = fract(v);
-  float h = t < 0.72 ? t / 0.72 : (1.0 - t) / 0.28;   // gentle stoss, steep lee
+  float h = t < 0.6 ? t / 0.6 : (1.0 - t) / 0.4;   // gentle stoss, steeper lee
   h = h * h * (3.0 - 2.0 * h);
   float amp = 0.45 + 0.6 * smoothstep(0.2, 0.8, vnoise(p * 0.3 + 9.0));
   // second, finer ripple set crossing at an angle
   float v2 = dot(p, normalize(wd + pr * 0.9)) * 3.6 + warp * 2.0;
   float h2 = 0.5 + 0.5 * sin(v2 * 6.2831);
-  float dune = fbm3(p * 0.055 + 2.0);
-  return vec2(h * amp + h2 * 0.12, dune * 22.0);
+  float dune = fbm3(p * 0.07 + 2.0);
+  return vec2(h * amp + h2 * 0.12, dune * 34.0);
 }
 #elif BIOME == 2
 vec2 pattern(vec2 p, vec4 nc) {
@@ -249,13 +270,13 @@ void main() {
   vec3 cr = voronoi(p * 3.4, 0.85);
   float crack = (1.0 - smoothstep(0.015, 0.06, cr.x)) * smoothstep(0.15, 0.6, G);
   alb *= 1.0 - 0.55 * crack;
-  alb *= mix(1.0, 0.8 + 0.3 * cr.y, G * 0.5);
+  alb *= mix(1.0, 0.55 + 0.3 * cr.y, G);
 #elif BIOME == 4
   vec3 vv = voronoi(p * 0.62, 0.9);
   float rim = exp(-sq(vv.x / 0.05));
   alb *= 0.96 + 0.06 * rim;
   float moist = D.b;
-  alb = mix(alb, alb * vec3(0.52, 0.54, 0.58), moist * 0.85 * (1.0 - rim * 0.5));
+  alb = mix(alb, alb * vec3(0.38, 0.4, 0.44), moist * 0.9 * (1.0 - rim * 0.4));
   alb = mix(alb, alb * 0.9, groove * 0.4);
 #endif
 
@@ -306,8 +327,9 @@ void main() {
   vec3 amb = mix(uGroundColor, uSkyColor, N.z * 0.5 + 0.5);
 #if BIOME == 3
   // aurora light bands drifting across
-  float band = pow(0.5 + 0.5 * sin(p.x * 0.22 + p.y * 0.08 + fbm3(p * 0.05 + uTime * 0.02) * 6.0 + uTime * 0.12), 5.0);
-  amb += uAurora * (0.35 + 1.4 * band);
+  float band = pow(0.5 + 0.5 * sin(p.x * 0.2 + p.y * 0.07 + fbm3(p * 0.05 + uTime * 0.02) * 6.0 + uTime * 0.12), 9.0);
+  band *= 0.5 + 0.5 * fbm3(vec2(p.x * 0.1, p.y * 0.4) + uTime * 0.05);
+  amb += uAurora * (0.25 + 0.6 * band);
 #endif
   vec3 col = alb * (uSunColor * diff * sunVis + amb * ao);
 
@@ -341,30 +363,21 @@ void main() {
   {
     // wet sand: mirror-ish sky reflection driven by ripple normals + sun sheen
     vec3 Rv = reflect(-V, N);
-    vec3 refl = skyReflect(Rv, L);
-    float fres = mix(0.1, 0.42, wet);
+    vec3 refl = mix(uHorizon * 1.05, uZenith, 0.3 * Rv.z) + uSunColor * pow(max(dot(Rv, L), 0.0), 10.0) * 0.6;
+    float fres = mix(0.05, 0.38, wet);
     col = mix(col, refl, fres);
-    float spec = pow(max(dot(N, Hh), 0.0), mix(24.0, 140.0, wet)) * mix(0.1, 1.2, wet);
-    col += uSunColor * spec * sunVis * 0.6;
+    float spec = pow(max(dot(N, Hh), 0.0), mix(14.0, 40.0, wet)) * mix(0.1, 0.9, wet);
+    col += uSunColor * spec * sunVis * 0.5;
     // residual foam lace
-    float lace = smoothstep(0.45, 0.75, vnoise(p * vec2(5.0, 13.0)) * 0.7 + vnoise(p * 21.0) * 0.4);
-    col = mix(col, vec3(0.95, 0.93, 0.9) * (amb + uSunColor * 0.5), D.a * lace * 0.8);
+    vec3 lv = voronoi(p * vec2(4.5, 6.5), 0.9);
+    float lace = 1.0 - smoothstep(0.02, 0.08, lv.x);
+    col = mix(col, vec3(0.95, 0.93, 0.9) * (amb * 1.3 + uSunColor * 0.5), clamp(D.a, 0.0, 1.0) * lace * 0.7);
     // water sheet (idle swash + surges)
     float dd = p.y - uWave.x;
-    if (dd > -0.3) {
-      vec2 wp = p + vec2(0.0, uTime * 0.2);
-      float wn = gnoise(wp * vec2(0.8, 2.2) + uTime * 0.3);
-      float edgeN = dd + wn * 0.12 + 0.08 * sin(p.x * 1.7 + uTime * 1.3);
-      float cover = smoothstep(0.0, 0.08, edgeN);
-      float thick = smoothstep(0.0, 2.5, edgeN);
-      vec3 sea = seaColor(p, uTime, uSkyColor, uSunColor);
-      vec3 sheet = mix(col * vec3(0.75, 0.9, 0.95), sea, clamp(thick * 0.85 + 0.12, 0.0, 1.0));
-      float a = cover * clamp(uWave.z, 0.0, 1.0);
-      a = max(a, cover * smoothstep(0.5, 1.2, edgeN));
-      col = mix(col, sheet, a);
-      float foam = exp(-sq((edgeN - 0.06) / 0.07)) * (0.6 + 0.4 * vnoise(p * vec2(4.0, 10.0) + uTime));
-      foam += exp(-sq((edgeN - 0.35) / 0.18)) * smoothstep(0.55, 0.8, vnoise(p * vec2(3.0, 7.0) - uTime * 0.3)) * 0.6;
-      col = mix(col, vec3(1.0, 0.97, 0.94) * (amb * 1.1 + uSunColor * 0.6), clamp(foam, 0.0, 1.0) * (0.5 + 0.5 * uWave.w + 0.3));
+    if (dd > -0.4) {
+      float wn = gnoise(p * vec2(0.6, 1.8) + uTime * 0.3);
+      float edgeN = dd + wn * 0.14 + 0.07 * sin(p.x * 1.3 + uTime * 1.1);
+      col = waterShade(col, p, edgeN, uTime, clamp(uWave.z, 0.0, 1.0), amb, uSunColor, L, uZenith, uHorizon);
     }
   }
 #elif BIOME == 3
@@ -378,7 +391,7 @@ void main() {
     float flick = 0.8 + 0.2 * sin(uTime * 2.3 + cr2.y * 30.0);
     col += hot * pow(heat, 1.5) * glowMask * 5.0 * flick;
     // aurora sheen on the glassy basalt grains
-    col += uAurora * band * 0.5 * pow(max(N.z, 0.0), 8.0);
+    col += uAurora * band * 0.12 * pow(max(N.z, 0.0), 8.0);
     // obsidian-like faint sheen
     col += uSkyColor * pow(max(dot(N, Hh), 0.0), 40.0) * 0.15;
   }
@@ -388,7 +401,7 @@ void main() {
     vec3 vv2 = voronoi(p * 0.62, 0.9);
     float rimH = exp(-sq(vv2.x / 0.07));
     float film = smoothstep(0.36, 0.56, fbm3(p * 0.1 + 5.0)) * (1.0 - rimH * 0.85);
-    film = max(film, D.b * 0.7 * (1.0 - rimH * 0.6));
+    film = mix(film, 0.35, D.b);
     vec3 Rv = reflect(-V, N);
     vec3 skyR = skyReflect(Rv, L);
     vec2 rp = p * 0.05 + Rv.xy * 0.8 + uTime * vec2(0.008, 0.003);

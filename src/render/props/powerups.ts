@@ -23,10 +23,10 @@ function glyphHourglass() {
     const c = new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20);
     c.rotateZ(Math.PI / 2); c.translate(s * 0.195, 0, 0);
     caps.push(prep(c, new THREE.Color('#e0b060')));
-    for (const k of [-1, 1]) {
+    if (s > 0) for (const k of [-1, 1]) {
       const rod = new THREE.CylinderGeometry(0.01, 0.01, 0.38, 6);
-      rod.rotateZ(Math.PI / 2); rod.translate(0, k * 0.1, s * 0.0 + 0.0);
-      if (s > 0) caps.push(prep(rod, new THREE.Color('#e0b060')));
+      rod.rotateZ(Math.PI / 2); rod.translate(0, k * 0.1, 0);
+      caps.push(prep(rod, new THREE.Color('#e0b060')));
     }
   }
   const sand = new THREE.ConeGeometry(0.075, 0.1, 16);
@@ -62,9 +62,7 @@ function glyphGhost() {
     }
   }
   g.computeVertexNormals();
-  g.rotateX(Math.PI / 2); // body axis along +y? keep: lathe axis y -> after rotateX, axis is z; we want facing camera
-  g.rotateX(-Math.PI / 2);
-  // lay it so the face looks up: axis along y (screen up), face toward +z
+  // lathe axis = +y (screen up); the face (eyes) looks toward +z, i.e. the camera
   const eyes: THREE.BufferGeometry[] = [];
   for (const s of [-1, 1]) {
     const e = new THREE.SphereGeometry(0.025, 8, 6);
@@ -147,8 +145,6 @@ function glyphShed() {
     parts: [{ geo: g, mat: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, transparent: true, opacity: 0.9, emissive: new THREE.Color('#2a9a30'), emissiveIntensity: 0.5, sheen: 1, sheenColor: new THREE.Color(0.8, 1, 0.8), side: THREE.DoubleSide }) }],
   };
 }
-
-export interface PowerupModel { root: THREE.Group }
 
 const cache = new Map<PowerupKind, THREE.Group>();
 let ringGeo: THREE.BufferGeometry | null = null;

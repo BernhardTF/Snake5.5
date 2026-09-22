@@ -23,6 +23,8 @@ uniform vec3 uSunDir, uSunColor, uSkyColor, uGroundColor;
 uniform sampler2D uCookie;
 uniform vec4 uCookieRegion;
 uniform vec4 uWave;
+uniform vec3 uZenith;
+uniform vec3 uHorizon;
 ${NOISE_GLSL}
 float sq(float x) { return x * x; }
 ${SEA_GLSL}
@@ -340,19 +342,11 @@ void main() {
 #if BIOME == 2
   if (!vert && p.y > uBoard.y) {
     // open sea side: wet shore then ocean with swash
-    float dy = p.y - uBoard.y;
-    float edgeN = p.y - uWave.x + gnoise(p * vec2(0.8, 2.2) + uTime * 0.3) * 0.12 + 0.08 * sin(p.x * 1.7 + uTime * 1.3);
-    vec3 sand = vec3(0.2, 0.14, 0.1);
+    float edgeN = p.y - uWave.x + gnoise(p * vec2(0.6, 1.8) + uTime * 0.3) * 0.14 + 0.07 * sin(p.x * 1.3 + uTime * 1.1);
     vec3 amb = mix(uGroundColor, uSkyColor, 0.9);
-    vec3 sc = sand * (uSunColor * L.z + amb);
-    sc += uSunColor * 0.12;
-    vec3 sea = seaColor(p, uTime, uSkyColor, uSunColor);
-    float cover = smoothstep(0.0, 0.08, edgeN);
-    col = mix(sc, sea, cover);
-    float foam = exp(-sq((edgeN - 0.06) / 0.07)) * (0.6 + 0.4 * vnoise(p * vec2(4.0, 10.0) + uTime));
-    foam += exp(-sq((edgeN - 0.6) / 0.2)) * smoothstep(0.55, 0.8, vnoise(p * vec2(3.0, 7.0) - uTime * 0.3)) * 0.5;
-    foam += smoothstep(0.7, 0.9, vnoise(p * vec2(1.5, 4.0) + vec2(0.0, -uTime * 0.6))) * 0.3 * smoothstep(0.5, 2.0, edgeN);
-    col = mix(col, vec3(1.0, 0.97, 0.94) * (amb + uSunColor * 0.6), clamp(foam, 0.0, 1.0));
+    vec3 sc = vec3(0.16, 0.11, 0.08) * (uSunColor * L.z + amb);
+    sc = mix(sc, mix(uHorizon, uZenith, 0.6), 0.2);
+    col = waterShade(sc, p, edgeN + 0.0, uTime, 1.0, amb, uSunColor, L, uZenith, uHorizon);
     // shade of the bamboo rails continuing at the sides is handled by the vertical branch
     gl_FragColor = vec4(col * vis, 1.0);
     #include <tonemapping_fragment>

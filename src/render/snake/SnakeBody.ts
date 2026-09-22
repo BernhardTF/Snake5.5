@@ -137,7 +137,7 @@ export class SnakeBody {
   }
 
   /** Box-filter a path segment [a,b] in place (src->dst), window shrinks toward ends so ends stay fixed. */
-  private boxPass(src: Float32Array, dst: Float32Array, a: number, b: number, k: number, headFixed: boolean) {
+  private boxPass(src: Float32Array, dst: Float32Array, a: number, b: number, k: number) {
     const pre = this.pre;
     pre[a * 2] = 0; pre[a * 2 + 1] = 0;
     // prefix sums offset by one: pre[(i+1)] = sum_{a..i}
@@ -145,8 +145,7 @@ export class SnakeBody {
     for (let i = a; i <= b; i++) { sx += src[i * 2]; sy += src[i * 2 + 1]; pre[(i + 1) * 2] = sx; pre[(i + 1) * 2 + 1] = sy; }
     pre[a * 2] = 0; pre[a * 2 + 1] = 0;
     for (let i = a; i <= b; i++) {
-      let kk = Math.min(k, b - i, i - a);
-      if (!headFixed && i - a < k) kk = Math.min(k, b - i, i - a); // same rule; kept for clarity
+      const kk = Math.min(k, b - i, i - a);
       if (kk <= 0) { dst[i * 2] = src[i * 2]; dst[i * 2 + 1] = src[i * 2 + 1]; continue; }
       const lo = i - kk, hi = i + kk + 1;
       const loX = lo === a ? 0 : pre[lo * 2], loY = lo === a ? 0 : pre[lo * 2 + 1];
@@ -173,8 +172,8 @@ export class SnakeBody {
     let a = 0;
     for (let gi = 0; gi <= gaps.length; gi++) {
       const b = gi < gaps.length ? gaps[gi] : n - 1;
-      this.boxPass(P, this.tmp, a, b, k, true);
-      this.boxPass(this.tmp, this.sm, a, b, k, true);
+      this.boxPass(P, this.tmp, a, b, k);
+      this.boxPass(this.tmp, this.sm, a, b, k);
       a = b + 1;
     }
     const S = this.sm;
@@ -186,7 +185,7 @@ export class SnakeBody {
     const headZone = r0 * 7.5;
     const dsHead = Math.max(0.022, r0 * 0.075);
     const budget = MAX_RINGS - Math.ceil((headZone + tipExt) / dsHead) - 8;
-    const dsBody = Math.max(0.05, Math.min(0.25, (L - headZone) / Math.max(50, budget)));
+    const dsBody = Math.max(0.055, Math.min(0.25, Math.max((L - headZone) / Math.max(50, budget), L / 750)));
     const totalLen = L - s0;
     const taperLen = Math.max(Math.min(totalLen * 0.32, 2.2 + totalLen * 0.2), Math.min(1.1, totalLen * 0.4));
     const taperStart = L - taperLen;
@@ -244,7 +243,7 @@ export class SnakeBody {
       let W = headProfile(xr);
       if (sq > taperStart) {
         const tt = Math.min(1, (sq - taperStart) / taperLen);
-        W *= Math.pow(Math.max(0, 1 - Math.pow(tt, 1.35)), 0.85) * (1 - 0.0) + 0.0;
+        W *= Math.pow(Math.max(0, 1 - Math.pow(tt, 1.35)), 0.85);
         if (tt >= 1) W = 0;
       }
       rW0[q] = W;
@@ -323,9 +322,10 @@ export class SnakeBody {
         let nt = w * Xp * (dzc + dh * Z) - h * Zp * dw * X;
         let ns = h * Zp;
         let nu = -w * Xp;
-        let l = Math.hypot(nt, ns, nu);
-        if (l < 1e-9) { nt = 0; ns = X; nu = Z; l = Math.hypot(ns, nu) || 1; }
-        nt /= l; ns /= l; nu /= l;
+        let l2 = nt * nt + ns * ns + nu * nu;
+        if (l2 < 1e-18) { nt = 0; ns = X; nu = Z; l2 = ns * ns + nu * nu || 1; }
+        const il = 1 / Math.sqrt(l2);
+        nt *= il; ns *= il; nu *= il;
         nor[o] = tx * nt + sx * ns;
         nor[o + 1] = ty * nt + sy * ns;
         nor[o + 2] = nu;

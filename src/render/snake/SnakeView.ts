@@ -59,7 +59,7 @@ export class SnakeView implements ISnakeView {
     // --- death writhe
     let px = s.points;
     if (!s.alive) {
-      if (this.wasAlive || !this.chain.active) this.chain.seed(s.points, s.count, s.spacing);
+      if (this.wasAlive || !this.chain.active) this.chain.seed(s.points, Math.min(s.count, s.points.length >> 1), s.spacing);
       if (!f.paused) this.chain.step(dt);
       px = this.chain.x;
     } else if (!this.wasAlive) {
@@ -79,8 +79,9 @@ export class SnakeView implements ISnakeView {
     const targetLead = s.alive ? Math.max(-0.07, Math.min(0.07, -s.turnRate * 0.018)) : 0;
     this.lead += (targetLead - this.lead) * (1 - Math.exp(-dt * 8));
 
+    const count = Math.min(s.count, s.points.length >> 1, px.length >> 1);
     this.body.build({
-      px, count: s.count, spacing: s.spacing, radius: this.r,
+      px, count, spacing: s.spacing, radius: this.r,
       fwdX: s.dirX, fwdY: s.dirY, bulges: s.bulges,
       waveAmp: this.amp, wavePhase: this.phase, waveLen: WAVE_LEN, headLead: this.lead,
     });
@@ -97,10 +98,10 @@ export class SnakeView implements ISnakeView {
     if (this.mat.transparent !== tr) { this.mat.transparent = tr; this.mat.needsUpdate = true; }
     this.mat.opacity = tr ? 1 - (1 - opacity) * (this.u.uGhost.value as number) : 1;
     this.mat.depthWrite = true;
-    this.mesh.visible = s.count >= 2;
-    this.head.group.visible = s.count >= 2;
+    this.mesh.visible = count >= 2;
+    this.head.group.visible = count >= 2;
 
-    if (s.count >= 2) {
+    if (count >= 2) {
       this.head.update(this.frameAtBound, this.body.tipS, this.r, f.paused ? 0 : dt, s.alive, s.deathT, s.interest, tr, this.mat.opacity);
     }
   }

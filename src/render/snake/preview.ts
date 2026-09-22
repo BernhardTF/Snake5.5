@@ -91,6 +91,10 @@ export function runPreview(params: URLSearchParams) {
     const ghost = params.get('ghost') === '1';
     const deadAt = params.has('dead') ? +params.get('dead')! : -1;
     const noProps = params.get('props') === '0';
+    const cycle = params.get('cycle') === '1';
+    let firedK = -1;
+    const wrapOff = +(params.get('wrap') ?? 0);
+    let wrapBuf: Float32Array | null = null;
     let frozen: Float32Array | null = null; let frozenCount = 0; let deathT = 0;
     let elapsed = 0;
     const step = (dt?: number) => {
@@ -105,6 +109,32 @@ export function runPreview(params: URLSearchParams) {
         f.snake.bulges = [];
       }
       if (noProps) { f.foods = []; f.obstacles = []; f.powerups = []; }
+      if (wrapOff) {
+        const P = f.snake.points;
+        if (!wrapBuf || wrapBuf.length < P.length) wrapBuf = new Float32Array(P.length);
+        for (let i = 0; i < f.snake.count; i++) {
+          wrapBuf[i * 2] = (((P[i * 2] + wrapOff) % W) + W) % W; wrapBuf[i * 2 + 1] = P[i * 2 + 1];
+        }
+        f.snake.points = wrapBuf;
+      }
+      if (cycle) {
+        // food 1: lives 2.2 s then is eaten; golden 2: expires; powerup: picked up
+        const period = 3.0;
+        const k = Math.floor(elapsed / period), ph = elapsed - k * period;
+        const fd = f.foods[0], gd = f.foods[1], pu = f.powerups[0];
+        if (fd) { fd.id = 100 + k; fd.age = ph; }
+        if (gd) { gd.id = 500 + k; gd.age = ph; gd.ttl = 2.4 - ph; }
+        if (pu) { pu.id = 900 + k; pu.age = ph; pu.ttl = 2.4 - ph; }
+        if (ph > 2.4) {
+          if (firedK === k) { f.foods = []; f.powerups = []; } else firedK = k;
+        }
+        if (ph > 2.4 && f.foods.length) {
+          if (fd) f.events.push({ type: 'eat', x: fd.x, y: fd.y, kind: 'normal', combo: 1, points: 10, length: 10 });
+          if (gd) f.events.push({ type: 'foodExpired', x: gd.x, y: gd.y });
+          if (pu) f.events.push({ type: 'powerup', x: pu.x, y: pu.y, kind: pu.kind });
+          f.foods = []; f.powerups = [];
+        }
+      }
       sv.update(f);
       pv.update(f);
       return f;

@@ -256,19 +256,13 @@ function saltMound(seed: number, round = false): THREE.BufferGeometry {
   return blob(4,
     (p) => {
       if (round) return 1 + (fbm3(p.x * 2 + o, p.y * 2, p.z * 2, seed, 3) - 0.5) * 0.3;
-      const cone = 1 + Math.max(0, p.z) * 0.0;
-      return cone * (1 + (fbm3(p.x * 2.2 + o, p.y * 2.2, p.z * 2.2, seed, 4) - 0.5) * 0.6 + (noise3(p.x * 9, p.y * 9, p.z * 9, seed + 1) - 0.5) * 0.12);
+      return (1 + (fbm3(p.x * 2.2 + o, p.y * 2.2, p.z * 2.2, seed, 4) - 0.5) * 0.6 + (noise3(p.x * 9, p.y * 9, p.z * 9, seed + 1) - 0.5) * 0.12);
     },
     (p, n) => {
       const c = lerpC(white, blue, (1 - n.z) * 0.35 + (noise3(p.x * 6, p.y * 6, p.z * 6, seed) - 0.5) * 0.3);
       return lerpC(c, grey, Math.max(0, 0.15 - p.z) * 3);
     },
-    round ? new THREE.Vector3(1, 1, 1) : new THREE.Vector3(1, 0.9, 0.95), round ? -10 : -0.2).applyMatrix4(
-    round ? new THREE.Matrix4() : coneWarp());
-}
-function coneWarp() {
-  // pinch the top toward a peak (applied as a shear-free non-linear warp below)
-  return new THREE.Matrix4();
+    round ? new THREE.Vector3(1, 1, 1) : new THREE.Vector3(1, 0.9, 0.95), round ? -10 : -0.2);
 }
 function pinch(g: THREE.BufferGeometry, k: number) {
   const p = g.getAttribute('position');

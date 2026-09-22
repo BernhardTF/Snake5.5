@@ -135,7 +135,7 @@ void snakeSurface() {
     ao = mix(ao, 1.0 - pe * 0.3, hm);
     det = mix(det, detH, hm);
     if (hm > 0.5) {
-      cid = mix(floor(hp * vec2(1.0, 1.0)) + vec2(e0 > 0.5 ? 0.0 : 0.0), vec2(floor(sTip / (uR * 0.38)), 99.0), lab);
+      cid = mix(floor(hp), vec2(floor(sTip / (uR * 0.38)), 99.0), lab);
       qy = 0.3;
     }
   }
@@ -325,7 +325,7 @@ void snakeSurface() {
   emit *= 1.0 - uDead * 0.8;
 
   // ghost: pale spectral
-  col = mix(col, vec3(0.55, 0.72, 0.9) * (0.5 + 0.5 * l), uGhost * 0.75);
+  col = mix(col, vec3(0.45, 0.65, 0.9) * (0.45 + 0.55 * l), uGhost * 0.55);
 
   sAlb = col * mix(1.0, sAO, 0.8);
   sRough = rough;
@@ -405,7 +405,7 @@ vInfo = aInfo; vSUv = aSUv;`);
   float thin = 1.0 - smoothstep(0.15, 0.8, vInfo.z);
   float back = 0.35 + 0.65 * clamp(0.5 - 0.5 * dot(normal, sunV), 0.0, 1.0);
   totalEmissiveRadiance = sEmit + uCRim * uSunCol * (rim * back * 0.16 + thin * 0.05) * uRimK * (1.0 - uGhost * 0.5);
-  totalEmissiveRadiance += vec3(0.45, 0.75, 1.0) * uGhost * (0.06 + 0.9 * rim);
+  totalEmissiveRadiance += vec3(0.35, 0.75, 1.0) * uGhost * (0.08 + 1.6 * rim);
 }`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_CLEARCOAT

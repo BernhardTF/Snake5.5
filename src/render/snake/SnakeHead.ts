@@ -25,7 +25,7 @@ function eyeMaterial() {
       .replace('#include <common>', `#include <common>
 varying vec3 vEL;
 uniform vec3 uIris, uLid; uniform float uPupil, uClosed, uGlow;
-float eh(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }`)
+`)
       .replace('#include <map_fragment>', `
 vec3 p = normalize(vEL);
 vec3 gaze = normalize(vec3(1.0, 0.22, 0.95));
@@ -155,18 +155,15 @@ export class SnakeHead {
     this.tongueMat.color.setStyle(L.tongue);
     this.tongueMat.emissive.setStyle(L.index === 7 ? '#ff4a10' : '#000000');
     this.tongueMat.emissiveIntensity = L.index === 7 ? 1.5 : 0;
-    this.hornMat.color.setStyle(L.base);
+    this.hornMat.color.setStyle(L.alt);
     this.horns = L.horns;
   }
 
-  /**
-   * Update from the body. `sHead(xTip)` converts distance-from-snout-tip to body arclength.
-   */
+  /** Attach to the body frame (frameAt: arclength -> ring frame) and animate blink / tongue. */
   update(
     frameAt: (s: number, out: RingFrame) => RingFrame, tipS: number, r: number,
     dt: number, alive: boolean, deathT: number, interest: number, ghost: boolean, opacity: number,
   ) {
-    this.seed = (this.seed * 16807) % 2147483647;
     const rnd = () => (this.seed = (this.seed * 16807) % 2147483647) / 2147483647;
     // --- blink
     let closed = 0;
@@ -208,13 +205,13 @@ export class SnakeHead {
       hm.visible = this.horns;
       if (this.horns) {
         // cone +Y axis -> up, tilted outward and back
-        const ux = ox * 0.35 - fx * 0.35, uy = oy * 0.35 - fy * 0.35, uz = 0.87;
+        const ux = ox * 0.62 - fx * 0.62, uy = oy * 0.62 - fy * 0.62, uz = 0.45;
         _y.set(ux, uy, uz).normalize();
         _x.set(fx, fy, 0).cross(_y).normalize();
         _z.crossVectors(_x, _y);
         _m.makeBasis(_x, _y, _z);
-        _m.scale(_z.set(r * 0.075, r * 0.34, r * 0.075));
-        _m.setPosition(px - fx * er * 0.3 + ox * er * -0.1, py - fy * er * 0.3 + oy * er * -0.1, pz + er * 0.55);
+        _m.scale(_z.set(r * 0.1, r * 0.72, r * 0.1));
+        _m.setPosition(px - fx * er * 0.2, py - fy * er * 0.2, pz + er * 0.45);
         hm.matrix.copy(_m);
         hm.matrixWorldNeedsUpdate = true;
       }

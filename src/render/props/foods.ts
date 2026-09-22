@@ -180,6 +180,7 @@ function date(): THREE.Group {
   });
   grp.add(mesh(merge(dates), M.glossy, 'fruit'));
   grp.add(mesh(merge(caps), M.matte, 'cap'));
+  grp.scale.setScalar(1.35);
   return grp;
 }
 

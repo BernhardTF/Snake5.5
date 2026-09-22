@@ -99,11 +99,16 @@ void main() {
       c.g = max(c.g, 1.0 - smoothstep(1.12, 1.5, dn));
       c.b = max(c.b, uHeatSet * (1.0 - smoothstep(0.55, 1.05, dn)));
     } else if (type == 1) {
-      float dist = length(p - A.xy);
+      // bow wave: only in front of the head (A.zw = heading), never refills the fresh groove
+      vec2 rel = p - A.xy;
+      float fwd = dot(rel, A.zw);
+      if (fwd < 0.0) continue;
+      float dist = length(rel);
       float dn = dist / P.x;
       if (dn > 2.5) continue;
-      c.r = max(c.r, P.y * exp(-dn * dn * 2.0));
-      c.g = max(c.g, 1.0 - smoothstep(0.8, 1.4, dn));
+      float wf = smoothstep(0.0, P.x * 0.6, fwd);
+      c.r = max(c.r, P.y * exp(-dn * dn * 2.0) * wf);
+      c.g = max(c.g, (1.0 - smoothstep(0.8, 1.4, dn)) * wf);
     } else if (type == 2) {
       float dist = length(p - A.xy);
       float dn = dist / P.x;
@@ -282,6 +287,10 @@ export class DeformSim {
       if (moved > 2) {
         // teleport (wrap / respawn) — do not stamp across it
       } else if (moved > 1e-5) {
+        // bow wave just ahead of the head (pushed first so the grooves below carve over it)
+        const dl = Math.hypot(s.dirX, s.dirY) || 1;
+        const dx = s.dirX / dl, dy = s.dirY / dl;
+        this.push(hx + dx * halfW * 0.9, hy + dy * halfW * 0.9, dx, dy, halfW * 0.8, 0.3, 0, SEG_BUMP);
         // trace the actual path via the body points (oldest -> newest so fresh carves win)
         const n = Math.min(12, s.count - 1, Math.ceil(moved / Math.max(0.02, s.spacing)) + 1);
         for (let i = n - 1; i >= 0; i--) {
@@ -290,10 +299,6 @@ export class DeformSim {
           if (Math.hypot(bx - ax, by - ay) > 1) continue;
           this.push(ax, ay, bx, by, halfW, depth, 0, SEG_GROOVE);
         }
-        // bow wave just ahead of the head
-        const dl = Math.hypot(s.dirX, s.dirY) || 1;
-        const dx = s.dirX / dl, dy = s.dirY / dl;
-        this.push(hx + dx * halfW * 1.15, hy + dy * halfW * 1.15, 0, 0, halfW * 0.75, 0.32, 0, SEG_BUMP);
       }
     }
     this.prevHead = [hx, hy];

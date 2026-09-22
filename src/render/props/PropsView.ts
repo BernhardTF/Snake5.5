@@ -202,7 +202,7 @@ export class PropsView implements IPropsView {
   constructor() {
     this.object.name = 'props';
     this.object.add(this.burst.mesh, this.dust.group);
-    this.hcRing = new THREE.RingGeometry(0.4, 0.5, 48);
+    this.hcRing = new THREE.RingGeometry(0.43, 0.5, 48);
     this.hcMat = new THREE.MeshBasicMaterial({ color: 0x3af0ff, toneMapped: false, transparent: true, opacity: 0.95, depthWrite: false });
     this.hcDark = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false });
     this.setBiome('karesansui');
@@ -303,7 +303,7 @@ export class PropsView implements IPropsView {
         eats.push(e);
         const gold = e.kind === 'golden';
         const cols = gold ? [new THREE.Color('#ffd35a'), new THREE.Color('#fff0b0'), new THREE.Color('#ffb020')] : fm.burst;
-        this.burst.emit(e.x, e.y, 0.15, cols, gold ? 26 : 16, gold ? 2.6 : 1.9, gold ? 0.09 : 0.1, gold ? 1.2 : this.biome === 'svartsandur' ? 1.5 : 0);
+        this.burst.emit(e.x, e.y, 0.15, cols, gold ? 30 : 22, gold ? 2.8 : 2.2, gold ? 0.1 : 0.13, gold ? 1.2 : this.biome === 'svartsandur' ? 1.5 : 0);
       } else if (e.type === 'foodExpired') expires.push(e);
       else if (e.type === 'powerup') {
         picks.push(e);
