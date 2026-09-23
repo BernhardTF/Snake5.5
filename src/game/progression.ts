@@ -26,7 +26,7 @@ export function levelProgress(xp: number) {
 }
 
 /** Allow `?unlock` in the URL to unlock everything (for demos / testing). */
-const UNLOCK_ALL = typeof location !== 'undefined' && /[?&]unlock\b/.test(location.search);
+const UNLOCK_ALL = typeof location !== 'undefined' && (/[?&]unlock\b/.test(location.search) || location.hash === '#unlock');
 
 export function isBiomeUnlocked(profile: Profile, id: BiomeId): boolean {
   if (UNLOCK_ALL) return true;
