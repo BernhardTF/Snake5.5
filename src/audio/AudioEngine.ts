@@ -1,7 +1,7 @@
 // Public audio engine for the game. Lazily creates the AudioContext on unlock() (user gesture),
 // forwards everything to AudioCore, runs the lookahead scheduler + idle pre-render jobs.
 // Every method is a safe no-op before unlock and never throws.
-import type { BiomeId, GameEvent } from '../types';
+import type { BiomeId, GameEvent, SkinId } from '../types';
 import type { IAudioEngine, UiSound } from './contract';
 import { AudioCore, Scene } from './core';
 
@@ -20,6 +20,7 @@ export class AudioEngine implements IAudioEngine {
   private scene: Scene = 'menu';
   private intensity = 0;
   private timeScale = 1;
+  private character: SkinId | null = null;
 
   /** Exposed for the dev bench. */
   get audioCore(): AudioCore | null { return this.core; }
@@ -40,6 +41,7 @@ export class AudioEngine implements IAudioEngine {
         c.setIntensity(this.intensity);
         c.setScene(this.scene);
         c.setBiome(this.biome);
+        if (this.character) c.setCharacter(this.character);
         this.timer = setInterval(() => this.tick(), 25);
         this.ctx.addEventListener?.('statechange', () => this.tick());
       }
@@ -109,6 +111,11 @@ export class AudioEngine implements IAudioEngine {
   }
   setSlither(speed: number, turnRate: number): void {
     this.safe((c) => c.setSlither(speed, turnRate));
+  }
+  setCharacter(id: SkinId): void {
+    if (typeof id !== 'string') return;
+    this.character = id;
+    this.safe((c) => c.setCharacter(id));
   }
   handleEvents(events: GameEvent[]): void {
     if (!events || !events.length) return;

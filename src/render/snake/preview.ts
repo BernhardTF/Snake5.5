@@ -1,20 +1,38 @@
 // Isolated preview for the snake + props renderers (?dev=snake&...).
-//   mode=snake (default) | skins | props
-//   skin=obsidian  biome=karesansui  length=14  zoom=1  ghost=1  dead=<sec>  ff=<frames>
+//   mode=snake (default) | skins | heads | props
+//   skin=obsidian  biome=<any BiomeId>  length=14  zoom=1  ghost=1  dead=<sec>  ff=<frames>  q=low|medium|high|ultra
 //   cx,cy = zoom centre (default: snake head)   hc=1 high contrast   w,h board
+//   mode=skins: set=all (default) | snakes | legends | new | old, cols=<n>, labels=0 hides names
+//   mode=heads: close-up grid of heads (same set/cols options, zoom = head zoom, default 5)
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FakeWorld } from '../../dev/fakeFrame';
 import { SnakeView } from './SnakeView';
 import { PropsView } from '../props/PropsView';
 import { LIGHT } from '../lighting';
-import type { BiomeId, PowerupKind, RenderFrame, SkinId } from '../../types';
-import { SKINS } from '../../skins/skins';
+import type { BiomeId, PowerupKind, QualityLevel, RenderFrame, SkinId } from '../../types';
+import { SKINS, type SkinInfo } from '../../skins/skins';
+import { BIOME_VISUALS } from '../biomeVisuals';
 
-const SAND: Record<BiomeId, string> = {
+// Flat preview sand per biome (falls back to the biome's own sand colour, then to neutral).
+const SAND: Partial<Record<BiomeId, string>> = {
   karesansui: '#d6cdbd', erg: '#d98f4e', lagoon: '#a88468', svartsandur: '#2a2a2c', salar: '#e8e6e2',
+  pinksands: '#ecc3bb', vaadhoo: '#3a3f4a', dallol: '#d8c24a', luna: '#8c8c8e', mars: '#b8683a',
+  titan: '#3a2c20', kepler: '#9a86c8',
 };
+const sandOf = (b: BiomeId) =>
+  SAND[b] ?? (BIOME_VISUALS as Partial<Record<BiomeId, { sandA?: string }>>)[b]?.sandA ?? '#d6cdbd';
 const BIOMES: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
+const OLD_SKINS = new Set<string>(['obsidian', 'emerald', 'coral', 'krait', 'viper', 'albino', 'rainbow', 'ember']);
+function skinSet(name: string | null): SkinInfo[] {
+  switch (name) {
+    case 'snakes': return SKINS.filter((k) => k.kind === 'snake');
+    case 'legends': return SKINS.filter((k) => k.kind === 'legend');
+    case 'new': return SKINS.filter((k) => k.kind === 'snake' && !OLD_SKINS.has(k.id));
+    case 'old': return SKINS.filter((k) => OLD_SKINS.has(k.id));
+    default: return SKINS;
+  }
+}
 
 export function runPreview(params: URLSearchParams) {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -30,6 +48,7 @@ export function runPreview(params: URLSearchParams) {
 
   const mode = params.get('mode') ?? 'snake';
   const biome = (params.get('biome') as BiomeId) ?? 'karesansui';
+  const quality = (params.get('q') as QualityLevel) ?? 'high';
   const W = +(params.get('w') ?? 28), H = +(params.get('h') ?? 18);
   const zoom = +(params.get('zoom') ?? 1);
   const scene = new THREE.Scene();
@@ -74,18 +93,22 @@ export function runPreview(params: URLSearchParams) {
   addEventListener('resize', fit);
 
   const tick: ((dt: number, t: number) => void)[] = [];
+  // heads mode: one viewport per cell, each camera follows that cell's snake head
+  const cells: { x: number; y: number; head: () => { x: number; y: number } }[] = [];
+  let headZoom = 0, gridCols = 1, gridRows = 1;
   let follow: (() => { x: number; y: number }) | null = null;
 
   if (mode === 'snake') {
-    plane(W + 4, H + 4, SAND[biome], W / 2, H / 2);
+    plane(W + 4, H + 4, sandOf(biome), W / 2, H / 2);
     const world = new FakeWorld(W, H);
     world.skin = (params.get('skin') as SkinId) ?? 'obsidian';
     world.length = +(params.get('length') ?? 14);
     const sv = new SnakeView();
+    sv.setQuality(quality);
     sv.debugTongue = params.get('tongue') === '1';
     scene.add(sv.object);
     const pv = new PropsView();
-    pv.setBiome(biome);
+    try { pv.setBiome(biome); } catch { pv.setBiome('karesansui'); }
     pv.setHighContrast(params.get('hc') === '1');
     scene.add(pv.object);
     const ghost = params.get('ghost') === '1';
@@ -145,22 +168,47 @@ export function runPreview(params: URLSearchParams) {
     tick.push(() => { lastF = step(); });
     follow = zoom > 1 && !params.has('cx') ? () => ({ x: lastF ? lastF.snake.points[0] : W / 2, y: lastF ? lastF.snake.points[1] : H / 2 }) : null;
     (window as any).__prev = { world, sv, pv };
-  } else if (mode === 'skins') {
-    const cols = 4, bw = 14, bh = 9;
-    viewW = cols * bw; viewH = 2 * bh;
+  } else if (mode === 'skins' || mode === 'heads') {
+    const list = skinSet(params.get('set'));
+    const heads = mode === 'heads';
+    const cols = +(params.get('cols') ?? (list.length > 16 ? 6 : 4));
+    const rows = Math.ceil(list.length / cols);
+    const bw = 14, bh = 9;
+    viewW = cols * bw; viewH = rows * bh;
     centre.set(viewW / 2, viewH / 2);
-    SKINS.forEach((sk, i) => {
-      const cx = (i % cols) * bw, cy = (1 - Math.floor(i / cols)) * bh;
-      plane(bw - 0.2, bh - 0.2, SAND[biome], cx + bw / 2, cy + bh / 2);
+    const labels = params.get('labels') !== '0';
+    const labelBox = document.createElement('div');
+    labelBox.style.cssText = 'position:fixed;inset:0;pointer-events:none;font:600 13px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000';
+    document.body.appendChild(labelBox);
+    list.forEach((sk, i) => {
+      const cx = (i % cols) * bw, cy = (rows - 1 - Math.floor(i / cols)) * bh;
+      plane(bw - 0.2, bh - 0.2, sandOf(biome), cx + bw / 2, cy + bh / 2);
       const world = new FakeWorld(bw, bh);
       world.skin = sk.id;
       world.length = +(params.get('length') ?? 9);
       const sv = new SnakeView();
+      sv.setQuality(quality);
       sv.object.position.set(cx, cy, 0);
       scene.add(sv.object);
-      for (let k = 0; k < 40 + i * 13; k++) sv.update(world.frame(1 / 30));
-      tick.push(() => { const f = world.frame(); f.foods = []; sv.update(f); });
+      const warm = +(params.get('ff') ?? (40 + i * 13));
+      let lastF: RenderFrame | null = null;
+      for (let k = 0; k < warm; k++) { lastF = world.frame(1 / 30); sv.update(lastF); }
+      tick.push(() => { const f = world.frame(); f.foods = []; lastF = f; sv.update(f); });
+      if (labels) {
+        const el = document.createElement('div');
+        el.textContent = sk.name + (sk.kind === 'legend' ? ' (legend)' : '');
+        el.style.position = 'absolute';
+        el.style.left = `${((i % cols) / cols) * 100}%`;
+        el.style.top = `${(Math.floor(i / cols) / rows) * 100}%`;
+        el.style.padding = '6px 8px';
+        labelBox.appendChild(el);
+      }
+      cells.push({ x: cx, y: cy, head: () => (lastF ? { x: cx + lastF.snake.points[0], y: cy + lastF.snake.points[1] } : { x: cx + bw / 2, y: cy + bh / 2 }) });
     });
+    if (heads) {
+      headZoom = +(params.get('zoom') ?? 5);
+      gridCols = cols; gridRows = rows;
+    }
   } else if (mode === 'props') {
     const rowH = 3.2, cols = 12;
     viewW = cols * 1.6 + 1; viewH = BIOMES.length * rowH;
@@ -168,7 +216,7 @@ export function runPreview(params: URLSearchParams) {
     const kinds: PowerupKind[] = ['slow', 'ghost', 'magnet', 'double', 'shed'];
     BIOMES.forEach((b, bi) => {
       const y0 = (BIOMES.length - 1 - bi) * rowH;
-      plane(viewW, rowH - 0.1, SAND[b], viewW / 2, y0 + rowH / 2);
+      plane(viewW, rowH - 0.1, sandOf(b), viewW / 2, y0 + rowH / 2);
       const pv = new PropsView();
       pv.setBiome(b);
       pv.setHighContrast(params.get('hc') === '1');
@@ -209,6 +257,31 @@ export function runPreview(params: URLSearchParams) {
     const now = performance.now();
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     for (const fn of tick) fn(dt, (now - t0) / 1000);
+    if (headZoom > 0) {
+      // grid of head close-ups
+      const cw = innerWidth / gridCols, ch = innerHeight / gridRows;
+      const hh = 9 / headZoom / 2, hw = hh * (cw / ch);
+      renderer.setScissorTest(true);
+      renderer.setClearColor('#111');
+      renderer.clear();
+      cells.forEach((cell, i) => {
+        const col = i % gridCols, row = Math.floor(i / gridCols);
+        const vx = col * cw, vy = (gridRows - 1 - row) * ch;
+        renderer.setViewport(vx + 1, vy + 1, cw - 2, ch - 2);
+        renderer.setScissor(vx + 1, vy + 1, cw - 2, ch - 2);
+        const h = cell.head();
+        cam.left = -hw; cam.right = hw; cam.top = hh; cam.bottom = -hh;
+        cam.updateProjectionMatrix();
+        cam.position.set(h.x, h.y, 40);
+        cam.lookAt(h.x, h.y, 0);
+        sun.target.position.set(h.x, h.y, 0);
+        sun.position.set(h.x, h.y, 0).addScaledVector(LIGHT.sunDir.value, 30);
+        renderer.render(scene, cam);
+      });
+      renderer.setScissorTest(false);
+      requestAnimationFrame(loop);
+      return;
+    }
     const c = follow ? follow() : centre;
     cam.position.set(c.x, c.y, 40);
     cam.lookAt(c.x, c.y, 0);

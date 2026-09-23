@@ -1,6 +1,6 @@
 // Procedural food models per biome. Built once per biome, cloned per food instance.
 import * as THREE from 'three';
-import { glowTexture, merge, prep, rng, sweep, fbm3 } from './geo';
+import { colorize, facetRock, glowTexture, merge, noise3, prep, rng, setGlow, smoothstep, surface, sweep, fbm3, vertexGlow } from './geo';
 import type { BiomeId } from '../../types';
 
 const C = (h: string) => new THREE.Color(h);
@@ -66,6 +66,7 @@ export interface SharedMats {
   matte: THREE.MeshStandardMaterial;
   gold: THREE.MeshPhysicalMaterial;
   goldDark: THREE.MeshPhysicalMaterial;
+  goldGlow: THREE.MeshPhysicalMaterial;
   glow: THREE.MeshBasicMaterial;
   sparkle: THREE.MeshBasicMaterial;
 }
@@ -79,6 +80,7 @@ export function sharedMats(): SharedMats {
     matte: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
     gold: new THREE.MeshPhysicalMaterial({ color: 0xffc94a, metalness: 1, roughness: 0.2, emissive: new THREE.Color(0xff9a1a), emissiveIntensity: 0.35, clearcoat: 0.6, side: THREE.DoubleSide }),
     goldDark: new THREE.MeshPhysicalMaterial({ color: 0xe0a030, metalness: 1, roughness: 0.3, emissive: new THREE.Color(0xff8a10), emissiveIntensity: 0.25 }),
+    goldGlow: new THREE.MeshPhysicalMaterial({ color: 0xffe28a, metalness: 0.7, roughness: 0.18, emissive: new THREE.Color(0xffb030), emissiveIntensity: 1.6, clearcoat: 0.8 }),
     glow: new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffc860, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0.8 }),
     sparkle: new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide }),
   };
@@ -380,17 +382,332 @@ export function sparkleGeometry() { return (_spark ??= sparkleGeo()); }
 let _plane: THREE.BufferGeometry | null = null;
 export function unitPlane() { return (_plane ??= new THREE.PlaneGeometry(1, 1)); }
 
-function goldify(src: THREE.Group, crystal: boolean): THREE.Group {
-  const M = sharedMats();
+// ================================================================== expansion world foods
+let _xm: ReturnType<typeof makeXMats> | null = null;
+function makeXMats() {
+  return {
+    pearl: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.08, iridescence: 0.55, iridescenceIOR: 1.5, sheen: 0.6, sheenRoughness: 0.3, sheenColor: new THREE.Color(1, 0.8, 0.85) }),
+    shellDS: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.2, sheen: 0.4, sheenColor: new THREE.Color(1, 0.85, 0.85), side: THREE.DoubleSide }),
+    nacre: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.1, iridescence: 0.9, iridescenceIOR: 1.45, iridescenceThicknessRange: [200, 600], emissive: new THREE.Color('#bfe8ff'), emissiveIntensity: 0.32, side: THREE.DoubleSide }),
+    salt: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, clearcoat: 0.7, clearcoatRoughness: 0.2, flatShading: true, sheen: 0.3, sheenColor: new THREE.Color(0.9, 0.95, 1) }),
+    brine: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.03 }),
+    he3: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.04, flatShading: true, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 2.2 }), 'he3'),
+    rockFlat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }),
+    ice: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.15, sheen: 0.8, sheenRoughness: 0.4, sheenColor: new THREE.Color(0.85, 0.95, 1), emissive: new THREE.Color('#9fd8ff'), emissiveIntensity: 0.14 }),
+    tholin: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.3, sheen: 0.8, sheenRoughness: 0.5, sheenColor: new THREE.Color(1, 0.7, 0.4), emissive: new THREE.Color('#ff7a2a'), emissiveIntensity: 0.16 }),
+    husk: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2, side: THREE.DoubleSide, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 1.8 }), 'husk'),
+    seedCore: new THREE.MeshStandardMaterial({ color: 0xf2ffb0, roughness: 0.3, emissive: new THREE.Color('#d8ff6a'), emissiveIntensity: 2.4 }),
+  };
+}
+const xm = () => (_xm ??= makeXMats());
+
+/** Soft additive halo under a food (removed from the golden variant, which gets its own). */
+function halo(color: string, scale: number, opacity: number) {
+  const m = noShadow(new THREE.Mesh(unitPlane(), new THREE.MeshBasicMaterial({ map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity })));
+  m.scale.setScalar(scale); m.position.z = 0.012; m.userData.role = 'glowN';
+  return m;
+}
+const withCol = (g: THREE.BufferGeometry, src: THREE.BufferGeometry) => { const o = prep(g); o.setAttribute('color', src.getAttribute('color')); return o; };
+
+// ---------------------------------------------------------------- pinksands: conch pearl on a scallop half
+function conchPearl(): THREE.Group {
+  const grp = new THREE.Group();
+  // scallop half, inside up: broad rounded ribs, deep bowl, raised rim, hinge at -x
+  const R = 0.34, span = 1.42, hx = -0.17, ribs = 11;
+  const coral = C('#e8506e'), pinkM = C('#f4868e'), cream = C('#ffe6d4');
+  const ribAt = (v: number) => Math.cos(v * ribs * Math.PI * 2);
+  const zAt = (u: number, v: number) => 0.012 + 0.34 * R * Math.pow(u, 1.7) + 0.016 * ribAt(v) * u;
+  const edge = (v: number) => R * (1 + 0.03 * ribAt(v)) * (0.93 + 0.07 * Math.cos(((v - 0.5) * 2) * Math.PI / 2));
+  const shell = surface(14, ribs * 6, (u, v, o) => {
+    const a = (v - 0.5) * 2 * span;
+    const rr = (0.05 + 0.95 * u) * edge(v);
+    o.set(hx + Math.cos(a) * rr, Math.sin(a) * rr, zAt(u, v));
+  }, true);
+  colorize(shell, (p) => {
+    const dx = p.x - hx, rr = Math.hypot(dx, p.y) / R, a = Math.atan2(p.y, dx);
+    const rib = ribAt(a / span * 0.5 + 0.5);
+    let c = lerpC(coral, pinkM, smoothstep(0.05, 0.6, rr));
+    c = lerpC(c, cream, smoothstep(0.68, 0.98, rr));
+    return c.multiplyScalar(0.84 + 0.16 * (rib * 0.5 + 0.5));
+  });
+  const geos = [withCol(shell, shell)];
+  // rolled cream rim (thickness) so the fan outline reads on pink sand
+  const rim: THREE.Vector3[] = [], rr: number[] = [];
+  for (let i = 0; i <= ribs * 6; i++) {
+    const v = i / (ribs * 6), a = (v - 0.5) * 2 * span, e = edge(v);
+    rim.push(new THREE.Vector3(hx + Math.cos(a) * e, Math.sin(a) * e, zAt(1, v) - 0.004));
+    rr.push(0.011);
+  }
+  geos.push(sweep(rim, rr, 6, 0.8, () => C('#ffd8c4')));
+  // hinge "ears"
+  for (const s of [-1, 1]) {
+    const ear = new THREE.SphereGeometry(0.045, 10, 6);
+    ear.scale(0.8, 1.1, 0.25); ear.translate(hx - 0.005, s * 0.05, 0.014);
+    geos.push(prep(ear, C('#e89a9a')));
+  }
+  grp.add(mesh(merge(geos), xm().shellDS, 'shell'));
+  // the pearl: glossy pink with conch "flame" streaks
+  const pg = new THREE.SphereGeometry(0.118, 28, 20);
+  colorize(pg, (p, n) => {
+    const flame = noise3(p.x * 42, p.y * 12, p.z * 42, 5);
+    const c = lerpC(C('#e04a70'), C('#ff9eb0'), smoothstep(-0.3, 0.9, n.z) * 0.85);
+    return lerpC(c, C('#ffe2e8'), smoothstep(0.62, 0.8, flame) * 0.5);
+  });
+  pg.translate(0.03, 0, 0.13);
+  grp.add(mesh(withCol(pg, pg), xm().pearl, 'pearl'));
+  return grp;
+}
+
+// ---------------------------------------------------------------- vaadhoo: moon shell
+function moonShell(): THREE.Group {
+  const grp = new THREE.Group();
+  const turns = 2.1, T = turns * Math.PI * 2;
+  const k = Math.log(2.7) / (Math.PI * 2);
+  const R1 = 0.17, n = 90;
+  const pts: THREE.Vector3[] = [], rr: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const th = t * T;
+    const R = R1 * Math.exp(k * (th - T));
+    const tube = R * 0.9;
+    pts.push(new THREE.Vector3(Math.cos(th) * R, Math.sin(th) * R, tube * 0.72 + 0.09 * Math.pow(1 - t, 1.6)));
+    rr.push(Math.max(0.003, tube));
+  }
+  const cream = C('#f6eee2'), lilac = C('#c6bcd8'), apex = C('#7e5e78'), inside = C('#9a7a6a');
+  const g = sweep(pts, rr, 16, 0.8, (t, a) => {
+    let c = lerpC(apex, cream, smoothstep(0.0, 0.45, t));
+    c = lerpC(c, lilac, Math.pow(Math.max(0, Math.cos((a - 0.18) * Math.PI * 2)), 12) * 0.7 * smoothstep(0.3, 0.6, t));
+    c = lerpC(c, C('#e6d2b8'), Math.max(0, Math.sin(t * 60)) * 0.12);
+    if (t > 0.985) c = lerpC(c, inside, 0.8);
+    return c;
+  });
+  grp.add(mesh(g, xm().nacre, 'shell'));
+  grp.add(halo('#7fd8ff', 1.05, 0.55));
+  grp.position.set(0.02, 0.0, 0);
+  const outer = new THREE.Group(); outer.add(grp);
+  return outer;
+}
+
+// ---------------------------------------------------------------- dallol: cubic salt crystals in a brine pool
+function saltCrystals(): THREE.Group {
+  const grp = new THREE.Group();
+  const r = rng(31);
+  const geos: THREE.BufferGeometry[] = [];
+  const white = C('#ffffff'), side = C('#dfe7ef'), pink = C('#f7e6ea');
+  const cube = (s: number, x: number, y: number, z: number, rz: number, tilt: number) => {
+    const b = new THREE.BoxGeometry(s, s, s).toNonIndexed();
+    b.deleteAttribute('uv');
+    b.rotateX(tilt); b.rotateZ(rz); b.translate(x, y, z);
+    b.computeVertexNormals();
+    const tint = r() < 0.25 ? pink : white;
+    colorize(b, (_p, n) => lerpC(side, tint, smoothstep(0.2, 0.9, n.z)));
+    geos.push(b);
+  };
+  cube(0.2, 0, 0, 0.09, 0.3, 0.06);
+  // hopper step on the big cube
+  cube(0.12, 0.0, 0.0, 0.155, 0.3, 0.06);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + r() * 0.5;
+    const s = 0.07 + r() * 0.07;
+    const d = 0.13 + r() * 0.06;
+    cube(s, Math.cos(a) * d, Math.sin(a) * d, s * 0.4, r() * 1.5, (r() - 0.5) * 0.6);
+  }
+  grp.add(mesh(merge(geos), xm().salt, 'crystal'));
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const rad = 0.3 * (0.88 + 0.18 * noise3(Math.cos(a) * 1.6, Math.sin(a) * 1.6, 0, 4));
+    if (i === 0) sh.moveTo(Math.cos(a) * rad, Math.sin(a) * rad); else sh.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+  }
+  const pool = new THREE.ShapeGeometry(sh, 2);
+  pool.translate(0, 0, 0.006);
+  colorize(pool, (p) => lerpC(C('#44e6c0'), C('#0c8c78'), smoothstep(0.1, 0.3, Math.hypot(p.x, p.y))));
+  grp.add(mesh(withCol(pool, pool), xm().brine, 'pool'));
+  return grp;
+}
+
+// ---------------------------------------------------------------- luna: helium-3 crystal
+function he3Crystal(): THREE.Group {
+  const grp = new THREE.Group();
+  const r = rng(17);
+  const geos: THREE.BufferGeometry[] = [];
+  const core = C('#f4fbff'), blue = C('#8ccfff'), deep = C('#3f8ed8');
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const main = i === 0;
+    const h = main ? 0.28 : 0.16 + r() * 0.07;
+    const rad = main ? 0.068 : 0.045 + r() * 0.012;
+    const body = new THREE.CylinderGeometry(rad * 0.9, rad, h, 6, 1, true); body.translate(0, h / 2, 0);
+    const tip = new THREE.ConeGeometry(rad * 0.9, rad * 2, 6, 1, true); tip.translate(0, h + rad, 0);
+    const top = h + rad * 2;
+    const g = merge([prep(body), prep(tip)]).toNonIndexed();
+    g.rotateX(Math.PI / 2);
+    const a = (i / n) * Math.PI * 2 + 0.4;
+    g.rotateY(main ? 0.25 : 0.95 + r() * 0.3);
+    g.rotateZ(a);
+    g.translate(Math.cos(a) * 0.02, Math.sin(a) * 0.02, 0.02);
+    g.computeVertexNormals();
+    const pz = g.getAttribute('position');
+    const col = new Float32Array(pz.count * 3), gl = new Float32Array(pz.count);
+    for (let k = 0; k < pz.count; k++) {
+      const x = pz.getX(k), y = pz.getY(k), z = pz.getZ(k);
+      const t = Math.min(1, Math.hypot(x, y, z) / top);
+      const f = (k % 3 === 0 ? 1 : 0.85) * (0.9 + 0.2 * Math.sin(k * 1.7));
+      const c = lerpC(lerpC(deep, blue, t * 1.4), core, smoothstep(0.55, 1, t)).multiplyScalar(f);
+      col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+      gl[k] = 0.35 + 0.65 * t;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aGlow', new THREE.BufferAttribute(gl, 1));
+    geos.push(g);
+  }
+  grp.add(mesh(merge(geos), xm().he3, 'crystal'));
+  const rock = facetRock(3, { detail: 0, cuts: 4, jag: 0.3, scale: new THREE.Vector3(0.12, 0.1, 0.07), floor: -0.02 });
+  colorize(rock, (p) => lerpC(C('#55534f'), C('#8a8884'), smoothstep(0, 0.07, p.z)));
+  grp.add(mesh(withCol(rock, rock), xm().rockFlat, 'rock'));
+  grp.add(halo('#8fd0ff', 1.15, 0.8));
+  return grp;
+}
+
+// ---------------------------------------------------------------- mars: water-ice drill core
+function iceCore(): THREE.Group {
+  const grp = new THREE.Group();
+  const geos: THREE.BufferGeometry[] = [];
+  const rad = 0.095;
+  const segs = [[-0.24, 0.2, 0.05], [-0.025, 0.18, -0.04], [0.17, 0.12, 0.07]];
+  const frost = C('#f6fbff'), band = C('#a9d3ef'), dust = C('#c98a66'), cut = C('#9fd6ff');
+  segs.forEach(([x0, len, rz], si) => {
+    const g = new THREE.CylinderGeometry(rad, rad, len, 22, 6, false);
+    g.deleteAttribute('uv');
+    g.rotateZ(Math.PI / 2);
+    g.translate(x0 + len / 2, 0, rad);
+    g.rotateZ(rz * 0.5);
+    g.computeVertexNormals();
+    colorize(g, (p, n) => {
+      const endFace = Math.abs(n.x) > 0.7 || Math.abs(Math.cos(rz * 0.5) * n.x + Math.sin(rz * 0.5) * n.y) > 0.7;
+      if (endFace) {
+        const rr = Math.hypot(p.y, p.z - rad) / rad;
+        return lerpC(cut, frost, smoothstep(0.5, 1, rr));
+      }
+      const layer = Math.sin(p.x * 95 + si * 1.3);
+      let c = lerpC(frost, band, smoothstep(0.55, 0.95, layer) * 0.7);
+      c = lerpC(c, dust, smoothstep(0.93, 0.99, Math.sin(p.x * 23 + 1.1)) * 0.5);
+      return c.multiplyScalar(0.94 + 0.08 * noise3(p.x * 60, p.y * 60, p.z * 60, si));
+    });
+    geos.push(g);
+  });
+  grp.add(mesh(merge(geos), xm().ice, 'ice'));
+  grp.add(halo('#cfeeff', 1.0, 0.45));
+  return grp;
+}
+
+// ---------------------------------------------------------------- titan: tholin bloom
+function tholinBloom(): THREE.Group {
+  const grp = new THREE.Group();
+  const r = rng(23);
+  const geos: THREE.BufferGeometry[] = [];
+  const orange = C('#f0862e'), brown = C('#6e3212'), tip = C('#ffcf7a');
+  const lump = (x: number, y: number, z: number, s: number, sd: number) => {
+    const g = new THREE.IcosahedronGeometry(1, 3);
+    g.deleteAttribute('uv');
+    const p = g.getAttribute('position');
+    const v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const d = 1 + (noise3(v.x * 3 + sd, v.y * 3, v.z * 3, sd) - 0.5) * 0.35 + (noise3(v.x * 9, v.y * 9, v.z * 9 + sd, sd + 1) - 0.5) * 0.12;
+      p.setXYZ(i, v.x * s * d + x, v.y * s * d + y, v.z * s * d * 0.9 + z);
+    }
+    g.computeVertexNormals();
+    colorize(g, (q, n) => {
+      let c = lerpC(brown, orange, smoothstep(-0.5, 0.6, n.z) * 0.9 + (q.z - 0.05) * 2);
+      c = lerpC(c, tip, smoothstep(0.75, 1, n.z) * smoothstep(0.08, 0.2, q.z) * 0.8);
+      return c.multiplyScalar(0.85 + 0.3 * noise3(q.x * 50, q.y * 50, q.z * 50, sd));
+    });
+    geos.push(g);
+  };
+  lump(0, 0, 0.12, 0.11, 1);
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + r() * 0.3;
+    const d = 0.15 + r() * 0.08;
+    const s = 0.055 + r() * 0.035;
+    lump(Math.cos(a) * d, Math.sin(a) * d, s * 0.8, s, 10 + i);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = r() * 6.28;
+    lump(Math.cos(a) * 0.08, Math.sin(a) * 0.08, 0.17 + r() * 0.04, 0.04 + r() * 0.02, 30 + i);
+  }
+  grp.add(mesh(merge(geos), xm().tholin, 'bloom'));
+  grp.add(halo('#ff9a4a', 0.95, 0.3));
+  return grp;
+}
+
+// ---------------------------------------------------------------- kepler: star seed pod
+function starSeed(): THREE.Group {
+  const grp = new THREE.Group();
+  const deep = C('#0d4f66'), teal = C('#1fb8b0'), tip = C('#c8fff2'), vein = C('#7affe0');
+  const geos: THREE.BufferGeometry[] = [];
+  const L = 0.34, W = 0.17;
+  for (let k = 0; k < 5; k++) {
+    const g = surface(14, 8, (u, v, o) => {
+      const s = (v - 0.5) * 2;
+      const w = W * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.75))), 0.9) * (1 - 0.15 * u);
+      o.set(0.04 + u * L, s * w * 0.5, 0.03 + 0.34 * L * u * u - 0.05 * W * s * s + 0.02 * u);
+    }, true);
+    const pz = g.getAttribute('position');
+    const col = new Float32Array(pz.count * 3), gl = new Float32Array(pz.count);
+    for (let i = 0; i < pz.count; i++) {
+      const u = (pz.getX(i) - 0.04) / L, s = Math.abs(pz.getY(i)) / (W * 0.5 + 1e-4);
+      let c = lerpC(deep, teal, smoothstep(0.05, 0.6, u));
+      c = lerpC(c, tip, smoothstep(0.72, 1, u));
+      const vn = Math.exp(-((s / 0.12) ** 2)) * smoothstep(0.1, 0.3, u);
+      c = lerpC(c, vein, vn * 0.8);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      gl[i] = 0.08 + 0.55 * smoothstep(0.7, 1, u) + 0.6 * vn;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aGlow', new THREE.BufferAttribute(gl, 1));
+    g.rotateZ((k / 5) * Math.PI * 2 + Math.PI / 2);
+    geos.push(g);
+  }
+  grp.add(mesh(merge(geos), xm().husk, 'husk'));
+  const seed = new THREE.SphereGeometry(0.095, 20, 14);
+  seed.scale(1, 1, 0.9); seed.translate(0, 0, 0.1);
+  grp.add(mesh(seed, xm().seedCore, 'glowcore'));
+  grp.add(halo('#9dff9a', 1.1, 0.6));
+  return grp;
+}
+
+/** Worlds with a dark / black sky environment: plain metal reflects almost nothing there, so the
+ * golden variant gets extra self-emission to still read (and bloom) as gold. */
+const GOLD_BOOST: Partial<Record<BiomeId, number>> = { luna: 0.9, vaadhoo: 0.55, titan: 0.45, kepler: 0.25, mars: 0.2 };
+const _boosted = new Map<number, { gold: THREE.MeshPhysicalMaterial; goldDark: THREE.MeshPhysicalMaterial }>();
+function goldify(src: THREE.Group, crystal: boolean, boost = 0): THREE.Group {
+  const M0 = sharedMats();
+  let M = M0;
+  if (boost > 0) {
+    let bm = _boosted.get(boost);
+    if (!bm) {
+      const gold = M0.gold.clone(); gold.emissiveIntensity += boost;
+      const goldDark = M0.goldDark.clone(); goldDark.emissiveIntensity += boost * 0.8;
+      bm = { gold, goldDark };
+      _boosted.set(boost, bm);
+    }
+    M = { ...M0, ...bm };
+  }
   const g = src.clone(true);
+  const drop: THREE.Object3D[] = [];
   g.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     const role = m.userData.role as string;
+    if (role === 'glowN') { drop.push(m); return; }
     if (role === 'glow') { m.material = M.glow; return; }
-    m.material = (role === 'anther' || role === 'center' || role === 'cap' || role === 'rock' || role === 'column') ? M.goldDark : M.gold;
+    if (role === 'glowcore') { m.material = M.goldGlow; return; }
+    m.material = (role === 'anther' || role === 'center' || role === 'cap' || role === 'rock' || role === 'column' || role === 'pool') ? M.goldDark : M.gold;
     if (crystal && role === 'crystal') m.material = M.gold;
   });
+  for (const o of drop) o.removeFromParent();
   // glow + sparkles
   const glow = noShadow(new THREE.Mesh(unitPlane(), M.glow));
   glow.scale.setScalar(1.3);
@@ -414,19 +731,31 @@ const BURST: Record<BiomeId, string[]> = {
   lagoon: ['#e01a34', '#ff5a6a', '#ffd23a'],
   svartsandur: ['#ff8a2a', '#ffc15a', '#ff4d1a'],
   salar: ['#d8182e', '#ff3a6a', '#e8c43a'],
+  pinksands: ['#f7a8b4', '#fff2ea', '#ec7a8e'],
+  vaadhoo: ['#6fe0ff', '#c8f4ff', '#2e9cff'],
+  dallol: ['#ffffff', '#f2e23a', '#3ad6b4'],
+  luna: ['#a8a6a0', '#6e6c68', '#bfe6ff'],
+  mars: ['#c0602a', '#e08a4a', '#8a3a1a'],
+  titan: ['#f0862e', '#b85a1c', '#ffc070'],
+  kepler: ['#ff5ae8', '#5af0ff', '#c890ff'],
 };
 
 const cache = new Map<BiomeId, FoodModel>();
 export function foodModel(b: BiomeId): FoodModel {
   let m = cache.get(b);
   if (m) return m;
-  const normal = b === 'karesansui' ? sakura() : b === 'erg' ? date() : b === 'lagoon' ? hibiscus() : b === 'svartsandur' ? emberCrystal() : kantuta();
+  const make: Record<BiomeId, () => THREE.Group> = {
+    karesansui: sakura, erg: date, lagoon: hibiscus, svartsandur: emberCrystal, salar: kantuta,
+    pinksands: conchPearl, vaadhoo: moonShell, dallol: saltCrystals, luna: he3Crystal,
+    mars: iceCore, titan: tholinBloom, kepler: starSeed,
+  };
+  const normal = (make[b] ?? kantuta)();
   if (b === 'svartsandur') {
     const glow = noShadow(new THREE.Mesh(unitPlane(), new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xff6a20, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0.9 })));
     glow.scale.setScalar(1.1); glow.position.z = 0.015; glow.userData.role = 'glow';
     normal.add(glow);
   }
-  const golden = goldify(normal, b === 'svartsandur');
+  const golden = goldify(normal, b === 'svartsandur', GOLD_BOOST[b] ?? 0);
   m = { normal, golden, burst: BURST[b].map((h) => new THREE.Color(h)), size: 0.4 };
   cache.set(b, m);
   return m;

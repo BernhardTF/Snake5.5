@@ -97,6 +97,51 @@ function tongueGeometry() {
   return g;
 }
 
+/**
+ * Eyelash-viper supraocular "lashes": a fan of 4 small keeled scale spikes in a local frame
+ * (x = outward, y = forward, z = up, unit = body radius), base on the brow ridge above the eye.
+ */
+function lashGeometry() {
+  const spikes = [
+    // [forward offset, outward offset, length, tilt out, rake forward]
+    [0.24, 0.0, 0.5, 1.1, 0.7],
+    [0.08, 0.04, 0.72, 1.25, 0.3],
+    [-0.08, 0.05, 0.66, 1.3, -0.1],
+    [-0.24, 0.02, 0.46, 1.15, -0.45],
+  ];
+  const pos: number[] = [], nor: number[] = [], idx: number[] = [];
+  const cone = new THREE.ConeGeometry(1, 1, 5, 1);
+  cone.translate(0, 0.5, 0);
+  const m = new THREE.Matrix4(), nm = new THREE.Matrix3();
+  const ax = new THREE.Vector3(), bx = new THREE.Vector3(), cx = new THREE.Vector3(), v = new THREE.Vector3();
+  let base = 0;
+  for (const [fy, ox, len, out, rake] of spikes) {
+    // spike axis: up, splayed outward and raked forward/back
+    ax.set(out, rake, 0.75).normalize();
+    bx.set(0, 1, 0).cross(ax).normalize();
+    cx.crossVectors(ax, bx);
+    m.makeBasis(bx, ax, cx);
+    // flattened like a scale: wide along forward, thin across
+    m.scale(v.set(0.11, len, 0.06));
+    m.setPosition(ox, fy, 0);
+    nm.getNormalMatrix(m);
+    const p = cone.getAttribute('position'), n = cone.getAttribute('normal');
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(m); pos.push(v.x, v.y, v.z);
+      v.fromBufferAttribute(n, i).applyMatrix3(nm).normalize(); nor.push(v.x, v.y, v.z);
+    }
+    const ix = cone.index!;
+    for (let i = 0; i < ix.count; i++) idx.push(ix.getX(i) + base);
+    base += p.count;
+  }
+  cone.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return g;
+}
+
 const _m = new THREE.Matrix4();
 const _s = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
@@ -111,6 +156,9 @@ export class SnakeHead {
   private hornL: THREE.Mesh;
   private hornR: THREE.Mesh;
   private hornMat: THREE.MeshStandardMaterial;
+  private lashL: THREE.Mesh;
+  private lashR: THREE.Mesh;
+  private lashMat: THREE.MeshStandardMaterial;
   private eyeMat: THREE.MeshPhysicalMaterial;
   private fr: RingFrame = { x: 0, y: 0, z: 0, tx: 1, ty: 0, w: 0, h: 0, zc: 0 };
   private fr2: RingFrame = { x: 0, y: 0, z: 0, tx: 1, ty: 0, w: 0, h: 0, zc: 0 };
@@ -122,6 +170,10 @@ export class SnakeHead {
   private flickN = 0;
   private seed = 1;
   horns = false;
+  /** Gaboon-style nasal horns (reuses the horn meshes). */
+  nasal = false;
+  lashes = false;
+  eyeScale = 1;
   /** Debug: keep the tongue flicking constantly. */
   forceTongue = false;
 
@@ -139,7 +191,12 @@ export class SnakeHead {
     hg.translate(0, 0.5, 0);
     this.hornL = new THREE.Mesh(hg, this.hornMat);
     this.hornR = new THREE.Mesh(hg, this.hornMat);
-    for (const m of [this.eyeL, this.eyeR, this.tongue, this.hornL, this.hornR]) {
+    this.lashMat = new THREE.MeshStandardMaterial({ color: 0xf5cf3a, roughness: 0.5, flatShading: true, side: THREE.DoubleSide });
+    const lg = lashGeometry();
+    this.lashL = new THREE.Mesh(lg, this.lashMat);
+    this.lashR = new THREE.Mesh(lg, this.lashMat);
+    this.lashL.visible = this.lashR.visible = false;
+    for (const m of [this.eyeL, this.eyeR, this.tongue, this.hornL, this.hornR, this.lashL, this.lashR]) {
       m.matrixAutoUpdate = false;
       m.castShadow = true;
       m.frustumCulled = false;
@@ -153,10 +210,15 @@ export class SnakeHead {
     this.eyeU.uPupil.value = L.pupil;
     this.eyeU.uGlow.value = L.eyeGlow;
     this.tongueMat.color.setStyle(L.tongue);
-    this.tongueMat.emissive.setStyle(L.index === 7 ? '#ff4a10' : '#000000');
-    this.tongueMat.emissiveIntensity = L.index === 7 ? 1.5 : 0;
-    this.hornMat.color.setStyle(L.alt);
+    const tg = L.tongueGlow ?? 0;
+    this.tongueMat.emissive.setStyle(L.index === 7 ? '#ff4a10' : tg > 0 ? L.tongue : '#000000');
+    this.tongueMat.emissiveIntensity = tg;
+    this.hornMat.color.setStyle(L.nasalHorns ? (L.extra ?? L.alt) : L.alt);
     this.horns = L.horns;
+    this.nasal = !!L.nasalHorns && !L.horns;
+    this.lashes = !!L.lashes;
+    this.lashMat.color.setStyle(L.alt);
+    this.eyeScale = L.eyeScale ?? 1;
   }
 
   /** Attach to the body frame (frameAt: arclength -> ring frame) and animate blink / tongue. */
@@ -185,7 +247,7 @@ export class SnakeHead {
 
     // --- eyes
     const fe = frameAt(tipS + r * 1.45, this.fr);
-    const er = r * 0.27;
+    const er = r * 0.27 * this.eyeScale;
     const fx = -fe.tx, fy = -fe.ty; // forward
     const sx = -fe.ty, sy = fe.tx;   // body side (right of tail direction)
     for (const side of [1, -1]) {
@@ -202,8 +264,20 @@ export class SnakeHead {
       m.matrixWorldNeedsUpdate = true;
       // horns
       const hm = side > 0 ? this.hornR : this.hornL;
-      hm.visible = this.horns;
-      if (this.horns) {
+      hm.visible = this.horns || this.nasal;
+      if (this.nasal) {
+        // two small soft horns between the nostrils, pointing up and forward
+        const fn = frameAt(tipS + r * 0.3, this.fr2);
+        const nx = fn.x + ox * fn.w * 0.3, ny = fn.y + oy * fn.w * 0.3, nz = fn.zc + fn.h * 0.8;
+        _y.set(fx * 0.55 + ox * 0.2, fy * 0.55 + oy * 0.2, 0.8).normalize();
+        _x.set(fx, fy, 0).cross(_y).normalize();
+        _z.crossVectors(_x, _y);
+        _m.makeBasis(_x, _y, _z);
+        _m.scale(_z.set(r * 0.075, r * 0.3, r * 0.075));
+        _m.setPosition(nx, ny, nz);
+        hm.matrix.copy(_m);
+        hm.matrixWorldNeedsUpdate = true;
+      } else if (this.horns) {
         // cone +Y axis -> up, tilted outward and back
         const ux = ox * 0.62 - fx * 0.62, uy = oy * 0.62 - fy * 0.62, uz = 0.45;
         _y.set(ux, uy, uz).normalize();
@@ -217,6 +291,21 @@ export class SnakeHead {
       }
     }
     this.eyeL.visible = this.eyeR.visible = fe.w > 0.01;
+    // eyelash crown: sits on the brow ridge above each eye (local x = outward, y = forward, z = up)
+    this.lashL.visible = this.lashR.visible = this.lashes && fe.w > 0.01;
+    if (this.lashes) {
+      for (const side of [1, -1]) {
+        const lm = side > 0 ? this.lashR : this.lashL;
+        const ox = sx * side, oy = sy * side;
+        _x.set(ox, oy, 0); _y.set(fx, fy, 0); _z.set(0, 0, 1);
+        _m.makeBasis(_x, _y, _z);
+        _m.scale(_s.set(r, r, r));
+        _m.setPosition(fe.x + ox * fe.w * 0.7, fe.y + oy * fe.w * 0.7, fe.zc + fe.h * 0.7 + er * 0.3);
+        lm.matrix.copy(_m);
+        lm.matrixWorldNeedsUpdate = true;
+      }
+      this.lashMat.transparent = ghost; this.lashMat.opacity = ghost ? opacity : 1;
+    }
 
     // --- tongue
     let ext = 0;
@@ -262,5 +351,7 @@ export class SnakeHead {
     this.eyeMat.dispose();
     this.tongueMat.dispose();
     this.hornMat.dispose();
+    this.lashL.geometry.dispose();
+    this.lashMat.dispose();
   }
 }

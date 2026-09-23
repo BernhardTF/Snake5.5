@@ -1,10 +1,17 @@
 // Offline self-test: renders the real engine graph into an OfflineAudioContext and checks
 // objective metrics (peak, RMS, NaN, DC, clipping, silence, spectral centroid).
-import type { BiomeId, GameEvent } from '../types';
+import type { BiomeId, CharacterId, GameEvent } from '../types';
 import type { UiSound } from './contract';
 import { AudioCore } from './core';
+import { LEGEND_IDS } from './legends';
 
-export const BIOME_IDS: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
+export const OLD_BIOMES: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
+export const NEW_BIOMES: BiomeId[] = ['pinksands', 'vaadhoo', 'dallol', 'luna', 'mars', 'titan', 'kepler'];
+export const BIOME_IDS: BiomeId[] = [...OLD_BIOMES, ...NEW_BIOMES];
+/** Biome used for each Legend's demo WAV. */
+const LEGEND_WAV_BIOME: Record<CharacterId, BiomeId> = {
+  centipede: 'erg', eel: 'vaadhoo', dragon: 'karesansui', mecha: 'mars', train: 'pinksands', comet: 'kepler',
+};
 const SR = 44100;
 
 export interface Action { t: number; fn: (c: AudioCore) => void }
@@ -174,11 +181,14 @@ const EVENTS: GameEvent[] = [
 ];
 const UIS: UiSound[] = ['hover', 'click', 'back', 'start', 'toggle', 'achievement', 'unlock', 'countdown', 'go'];
 
-export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => void } = {}) {
+export async function runSelfTest(opts: { wav?: boolean; wavAll?: boolean; only?: string; log?: (s: string) => void } = {}) {
   const log = opts.log ?? ((s: string) => console.log(s));
   const results: Result[] = [];
   const centroids: Record<string, number> = {};
   const wavs: Record<string, string> = {};
+  const metrics: Record<string, unknown> = {};
+  /** `only=music,legend,...` limits the run to some sections (dev iteration). */
+  const want = (sec: string) => !opts.only || opts.only.split(',').includes(sec);
   const check = (name: string, pass: boolean, info: string) => {
     results.push({ name, pass, info });
     log(`[selftest] ${pass ? 'PASS' : 'FAIL'} ${name} ${info}`);
@@ -190,7 +200,7 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   };
 
   // 1. music per biome at two intensities
-  for (const b of BIOME_IDS) {
+  for (const b of want('music') ? BIOME_IDS : []) {
     const rms: number[] = [];
     for (const inten of [0.2, 0.9]) {
       await tryRun(`music:${b}@${inten}`, async () => {
@@ -200,6 +210,7 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
         const m = analyze(buf, 1.5, 10);
         rms.push(m.rms);
         centroids[`${b}@${inten}`] = m.centroid;
+        metrics[`music:${b}@${inten}`] = { peak: +m.peak.toFixed(3), rmsDb: +m.rmsDb.toFixed(1), centroid: Math.round(m.centroid), silence: m.longestSilence, renderMs: Math.round(ms) };
         const st = core.stats();
         check(`music:${b}@${inten}`, sane(m) && st.errors === 0, `${fmt(m)} voices=${st.musicVoices} errors=${st.errors} render=${ms.toFixed(0)}ms`);
       });
@@ -208,7 +219,7 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   }
 
   // 2. scenes
-  for (const b of ['karesansui', 'salar'] as BiomeId[]) {
+  for (const b of want('scene') ? ['karesansui', 'salar', 'luna', 'titan'] as BiomeId[] : []) {
     await tryRun(`scene:menu:${b}`, async () => {
       const { buf } = await renderOffline({ dur: 8, setup: (c) => { c.setBiome(b); c.setScene('menu'); } });
       const m = analyze(buf, 1, 8);
@@ -237,7 +248,7 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   }
 
   // 3. slow time
-  await tryRun('timescale', async () => {
+  if (want('scene')) await tryRun('timescale', async () => {
     let bpmA = 0, bpmB = 0;
     const { buf } = await renderOffline({
       dur: 12, setup: (c) => { c.setBiome('erg'); c.setScene('game'); c.setIntensity(0.9); },
@@ -251,17 +262,17 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   });
 
   // 4. biome crossfade
-  await tryRun('crossfade', async () => {
+  if (want('scene')) await tryRun('crossfade', async () => {
     const { buf, core } = await renderOffline({
       dur: 12, setup: (c) => { c.setBiome('karesansui'); c.setScene('game'); c.setIntensity(0.7); },
-      actions: [{ t: 4, fn: (c) => c.setBiome('erg') }, { t: 8, fn: (c) => c.setBiome('svartsandur') }],
+      actions: [{ t: 4, fn: (c) => c.setBiome('luna') }, { t: 8, fn: (c) => c.setBiome('kepler') }],
     });
     const m = analyze(buf, 1.5, 12);
     check('crossfade', sane(m) && core.stats().runtimes <= 2, `${fmt(m)} runtimes=${core.stats().runtimes}`);
   });
 
   // 5. sfx (music muted)
-  for (const b of BIOME_IDS) {
+  for (const b of want('sfx') ? BIOME_IDS : []) {
     await tryRun(`sfx:${b}`, async () => {
       const gap = 2.2;
       const list = b === 'karesansui' ? EVENTS : EVENTS.filter((e) => e.type === 'eat' || e.type === 'start' || e.type === 'death' || e.type === 'milestone');
@@ -289,7 +300,8 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   }
 
   // 6. slither
-  await tryRun('slither', async () => {
+  let slitherRef = 0;
+  if (want('slither') || want('legend')) await tryRun('slither', async () => {
     const { buf } = await renderOffline({
       dur: 9,
       setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome('karesansui'); c.setScene('game'); c.setSlither(0, 0); },
@@ -303,15 +315,79 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
     const off = analyze(buf, 0.5, 2), slow = analyze(buf, 2.5, 4), fast = analyze(buf, 4.5, 6), turn = analyze(buf, 6.3, 7.5), off2 = analyze(buf, 8.2, 9);
     const pass = off.rms < 1e-4 && slow.rms > 1e-3 && fast.rms > slow.rms && turn.rms > fast.rms && off2.rms < 1e-3 && fast.peak < 0.5 && fast.nan === 0;
     check('slither', pass, `off=${off.rmsDb.toFixed(1)} slow=${slow.rmsDb.toFixed(1)} fast=${fast.rmsDb.toFixed(1)} turn=${turn.rmsDb.toFixed(1)} off2=${off2.rmsDb.toFixed(1)}dB centroid fast=${fast.centroid.toFixed(0)}`);
-    for (const b of ['erg', 'lagoon', 'svartsandur', 'salar'] as BiomeId[]) {
+    for (const b of BIOME_IDS.slice(1)) {
       const r = await renderOffline({ dur: 3, setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome(b); c.setScene('game'); c.setSlither(7, 2); } });
       const m = analyze(r.buf, 1, 3);
+      metrics[`slither:${b}`] = { rmsDb: +m.rmsDb.toFixed(1), centroid: Math.round(m.centroid) };
       check(`slither:${b}`, m.rms > 1e-3 && m.peak < 0.5 && m.nan === 0, `rms=${m.rmsDb.toFixed(1)}dB centroid=${m.centroid.toFixed(0)}Hz`);
     }
   });
 
+  // 6b. Legends: loop silent at speed 0, audible when moving, signature SFX sane
+  if (want('legend')) await tryRun('legend:ref', async () => {
+    const r = await renderOffline({ dur: 4, setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome('karesansui'); c.setScene('game'); c.setSlither(6, 0); } });
+    const m = analyze(r.buf, 2.6, 4);
+    slitherRef = m.rms;
+    metrics['slither:karesansui@6'] = { rmsDb: +m.rmsDb.toFixed(1) };
+  });
+  for (const id of want('legend') ? LEGEND_IDS : []) {
+    await tryRun(`legend:${id}`, async () => {
+      const ev = (e: GameEvent) => (c: AudioCore) => c.handleEvents([e]);
+      const { buf, core } = await renderOffline({
+        dur: 14,
+        setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome('karesansui'); c.setScene('game'); c.setCharacter(id); c.setSlither(0, 0); },
+        actions: [
+          { t: 2, fn: (c) => c.setSlither(6, 0) },
+          { t: 5, fn: (c) => c.setSlither(10, 0) },
+          { t: 5.6, fn: (c) => { c.setSlither(10, 4); c.handleEvents([{ type: 'turn', x: 0, y: 0 }]); } },
+          { t: 6.1, fn: (c) => { c.setSlither(10, 0); c.handleEvents([{ type: 'turn', x: 0, y: 0 }]); } },
+          { t: 6.6, fn: (c) => c.setSlither(0, 0) },
+          { t: 9, fn: (c) => c.setSlither(6, 0) },
+          { t: 9.2, fn: ev({ type: 'eat', x: 0, y: 0, kind: 'normal', combo: 1, points: 10, length: 5 }) },
+          { t: 10.0, fn: (c) => c.handleEvents([{ type: 'eat', x: 0, y: 0, kind: 'normal', combo: 4, points: 40, length: 6 }, { type: 'combo', combo: 4 }]) },
+          { t: 10.8, fn: ev({ type: 'eat', x: 0, y: 0, kind: 'golden', combo: 5, points: 100, length: 7 }) },
+          { t: 11.6, fn: (c) => { c.handleEvents([{ type: 'death', x: 0, y: 0, cause: 'wall' }]); c.setSlither(0, 0); } },
+        ],
+      });
+      const off = analyze(buf, 0.5, 2), slow = analyze(buf, 2.6, 5), fast = analyze(buf, 5.1, 5.55), off2 = analyze(buf, 7.8, 9);
+      const evs = analyze(buf, 9, 14);
+      const st = core.stats();
+      const rel = slitherRef ? 20 * Math.log10(slow.rms / slitherRef) : 0;
+      metrics[`legend:${id}`] = {
+        offDb: +off.rmsDb.toFixed(1), speed6Db: +slow.rmsDb.toFixed(1), speed10Db: +fast.rmsDb.toFixed(1), stopDb: +off2.rmsDb.toFixed(1),
+        vsSlitherDb: +rel.toFixed(1), eventsPeak: +evs.peak.toFixed(3), centroid6: Math.round(slow.centroid), legendVoices: st.legendVoices,
+      };
+      const pass = off.rms < 1e-4 && slow.rms > 1e-3 && fast.rms >= slow.rms * 0.9 && off2.rms < 1e-3 && slow.peak < 0.5 && fast.peak < 0.6
+        && evs.peak < 0.98 && evs.nan === 0 && slow.nan === 0 && st.errors === 0 && st.character === id && Math.abs(rel) < 5;
+      check(`legend:${id}`, pass, `off=${off.rmsDb.toFixed(1)} v6=${slow.rmsDb.toFixed(1)} v10=${fast.rmsDb.toFixed(1)} stop=${off2.rmsDb.toFixed(1)}dB vsSlither=${rel.toFixed(1)}dB peak6=${slow.peak.toFixed(3)} events{${fmt(evs)}}`);
+    });
+  }
+  // menu preview: each Legend auditions its signature once; the loop itself stays silent
+  if (want('legend')) await tryRun('legend:audition', async () => {
+    const { buf, core } = await renderOffline({
+      dur: 1 + LEGEND_IDS.length * 2 + 1,
+      setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome('kepler'); c.setScene('menu'); c.setSlither(2, 0); },
+      actions: LEGEND_IDS.map((id, i) => ({ t: 1 + i * 2, fn: (c: AudioCore) => c.setCharacter(id) })),
+    });
+    const quiet = analyze(buf, 0.2, 1);
+    const peaks = LEGEND_IDS.map((_, i) => analyze(buf, 1 + i * 2, 3 + i * 2).peak);
+    check('legend:audition', quiet.rms < 1e-4 && peaks.every((p) => p > 0.01 && p < 0.9) && core.stats().errors === 0,
+      LEGEND_IDS.map((id, i) => `${id}=${peaks[i].toFixed(3)}`).join(' '));
+  });
+  // snake after legend: slither returns, legend loop gone
+  if (want('legend')) await tryRun('legend:switchback', async () => {
+    const { buf, core } = await renderOffline({
+      dur: 6,
+      setup: (c) => { c.setVolumes(1, 0, 1, false); c.setBiome('erg'); c.setScene('game'); c.setCharacter('train'); c.setSlither(7, 0); },
+      actions: [{ t: 2.5, fn: (c) => c.setCharacter('obsidian') }, { t: 4.5, fn: (c) => c.setScene('menu') }],
+    });
+    const a = analyze(buf, 1, 2.5), b = analyze(buf, 3.2, 4.5), c2 = analyze(buf, 5.4, 6);
+    check('legend:switchback', a.rms > 1e-3 && b.rms > 1e-3 && c2.rms < 1e-3 && core.stats().character === null,
+      `train=${a.rmsDb.toFixed(1)} snake=${b.rmsDb.toFixed(1)} menu=${c2.rmsDb.toFixed(1)}dB`);
+  });
+
   // 7. voice-limit stress
-  await tryRun('stress', async () => {
+  if (want('stress')) await tryRun('stress', async () => {
     let maxVoices = 0;
     const burst: GameEvent[] = [];
     for (let i = 0; i < 40; i++) burst.push({ type: 'eat', x: 0, y: 0, kind: i % 5 ? 'normal' : 'golden', combo: 1 + (i % 8), points: 10, length: 5 });
@@ -327,8 +403,8 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   log('[selftest] centroids: ' + Object.entries(centroids).map(([k, v]) => `${k}=${v.toFixed(0)}Hz`).join(' '));
 
   // 8. 20 s demo WAV per biome
-  if (opts.wav) {
-    for (const b of BIOME_IDS) {
+  if (opts.wav && want('wav')) {
+    for (const b of opts.wavAll ? BIOME_IDS : NEW_BIOMES) {
       await tryRun(`wav:${b}`, async () => {
         const acts: Action[] = [
           { t: 6, fn: (c) => c.setIntensity(0.5) },
@@ -346,7 +422,33 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
         });
         const m = analyze(buf, 1, 20);
         wavs[b] = toBase64(encodeWav(buf));
+        metrics[`wav:${b}`] = { peak: +m.peak.toFixed(3), rmsDb: +m.rmsDb.toFixed(1), centroid: Math.round(m.centroid) };
         check(`wav:${b}`, sane(m), fmt(m));
+      });
+    }
+    // 10 s demo per Legend, in the mix of a fitting world
+    for (const id of LEGEND_IDS) {
+      await tryRun(`wav:legend-${id}`, async () => {
+        const acts: Action[] = [
+          { t: 1.2, fn: (c) => c.setSlither(4, 0) },
+          { t: 3, fn: (c) => c.setSlither(7, 0) },
+          { t: 5.5, fn: (c) => c.setSlither(10, 0) },
+          { t: 8.4, fn: (c) => c.setSlither(0, 0) },
+          { t: 8.4, fn: (c) => c.handleEvents([{ type: 'death', x: 0, y: 0, cause: 'wall' }]) },
+        ];
+        for (let i = 0; i < 5; i++) {
+          const t = 1.8 + i * 1.3, combo = i + 1;
+          acts.push({ t, fn: (c) => c.handleEvents([{ type: 'eat', x: 0, y: 0, kind: i === 4 ? 'golden' : 'normal', combo, points: 10, length: 5 }, ...(combo >= 2 ? [{ type: 'combo', combo } as GameEvent] : [])]) });
+          acts.push({ t: t + 0.6, fn: (c) => { c.handleEvents([{ type: 'turn', x: 0, y: 0 }]); c.setSlither(5 + i * 1.2, i % 2 ? 3.5 : 0); } });
+        }
+        const { buf } = await renderOffline({
+          dur: 10, setup: (c) => { c.setVolumes(1, 0.7, 0.9, false); c.setBiome(LEGEND_WAV_BIOME[id]); c.setScene('game'); c.setIntensity(0.35); c.setCharacter(id); c.setSlither(0, 0); },
+          actions: acts,
+        });
+        const m = analyze(buf, 1, 10);
+        wavs[`legend-${id}`] = toBase64(encodeWav(buf));
+        metrics[`wav:legend-${id}`] = { peak: +m.peak.toFixed(3), rmsDb: +m.rmsDb.toFixed(1), centroid: Math.round(m.centroid) };
+        check(`wav:legend-${id}`, sane(m), fmt(m));
       });
     }
   }
@@ -354,5 +456,5 @@ export async function runSelfTest(opts: { wav?: boolean; log?: (s: string) => vo
   const pass = results.filter((r) => r.pass).length;
   const fail = results.length - pass;
   log(`[selftest] SUMMARY pass=${pass} fail=${fail}`);
-  return { pass, fail, results, centroids, wavs };
+  return { pass, fail, results, centroids, wavs, metrics };
 }

@@ -572,14 +572,15 @@ class LunaScore extends Score {
     // L2: slow sine arpeggio, soft sub pulse
     [0, 4, 8, 12].forEach((st, i) => c.at(st, 2, (t) => {
       const f = mtofHz(R + ch[i % ch.length]);
-      this.s.tone(this.v(2), t, 'sine', f, f, 1.4, 0.035, { attack: 0.01, pan: i % 2 ? 0.45 : -0.45 });
+      this.s.tone(this.v(2), t, 'sine', f, f, 1.4, 0.05, { attack: 0.01, pan: i % 2 ? 0.45 : -0.45 });
     }));
-    c.at(0, 2, (t) => this.s.membrane(this.v(2), t, 52, 40, 0.5, 0.18, 120, 0));
+    c.at(0, 2, (t) => this.s.membrane(this.v(2), t, 52, 40, 0.5, 0.24, 120, 0));
+    c.at(8, 2, (t) => this.s.membrane(this.v(2), t, 52, 40, 0.4, 0.12, 120, 0));
     // L3: glass bells from far away, octave sine echo
-    for (const st of [2, 10]) c.at(st, 3, (t) => this.s.bell(this.v(3), t, R + 24 + pick(this.rng, ch), 3, 0.022, { glass: true, pan: st < 8 ? -0.6 : 0.6 }));
+    for (const st of [2, 10]) c.at(st, 3, (t) => this.s.bell(this.v(3), t, R + 24 + pick(this.rng, ch), 3, 0.035, { glass: true, pan: st < 8 ? -0.6 : 0.6 }));
     [2, 6, 10, 14].forEach((st, i) => c.at(st, 3, (t) => {
       const f = mtofHz(R + 12 + ch[(i + 2) % ch.length]);
-      this.s.tone(this.v(3), t, 'sine', f, f, 0.8, 0.018, { attack: 0.01, pan: i % 2 ? -0.3 : 0.3 });
+      this.s.tone(this.v(3), t, 'sine', f, f, 0.8, 0.03, { attack: 0.01, pan: i % 2 ? -0.3 : 0.3 });
     }));
   }
 }
@@ -601,7 +602,7 @@ class MarsScore extends Score {
     const midi = this.m(deg, 1);
     const from = this.last && Math.abs(this.last - midi) <= 5 && this.rng() < 0.4 ? this.last : 0;
     this.last = midi;
-    c.at(step, layer, (t, sd) => this.s.analog(this.v(layer), t, midi, Math.max(0.2, len * sd * 0.95), vel * 0.06,
+    c.at(step, layer, (t, sd) => this.s.analog(this.v(layer), t, midi, Math.max(0.2, len * sd * 0.95), vel * 0.1,
       { cutoff: 1300, env: 2.2, q: 2, decay: len * sd * 0.6, from, pan: -0.1 }));
   }
   bar(c: BarCtx) {
@@ -610,7 +611,7 @@ class MarsScore extends Score {
     const R = this.key.root;
     for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel);
     // L0: slow-sweep analog pad
-    c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, ch.map((x) => R + x), 16 * sd * 1.12, 0.036, { cutoff: 650, sweep: 2.4, q: 2.5 }));
+    c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, ch.map((x) => R + x), 16 * sd * 1.12, 0.05, { cutoff: 650, sweep: 2.4, q: 2.5 }));
     // L2: 16th arpeggio (ping-pong) + pulsing bass
     const up = [ch[0], ch[1], ch[2], ch[0] + 12, ch[1] + 12, ch[0] + 12, ch[2], ch[1]];
     for (let st = 0; st < 16; st++) {

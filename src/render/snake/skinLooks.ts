@@ -94,17 +94,17 @@ export const SKIN_LOOKS: Record<SnakeSkinId, SkinLook> = {
   // ---- expansion
   gaboon: {
     // tan / buff / dark-brown geometric saddles with pale borders, velvety keeled scales
-    index: 8, base: '#a4825a', pattern: '#3a2418', belly: '#e4d4b8', alt: '#d9c29a',
+    index: 8, base: '#94704a', pattern: '#2e1b12', belly: '#e0cfb0', alt: '#cdb285',
     rim: '#d8a878', rimStrength: 0.3, roughness: 0.66, clearcoat: 0.14, keel: 0.85,
     iridescence: 0, sheen: 0.45, emissive: 0, iris: '#c8b48a', pupil: 1, eyeGlow: 0, horns: false, tongue: '#2a201c',
-    extra: '#f1e5c6', headWidth: 1, nasalHorns: true, eyeScale: 0.82,
+    extra: '#eadcb6', headWidth: 1, nasalHorns: true, eyeScale: 0.82,
   },
   bluecoral: {
     // midnight navy, electric-blue lateral stripes, coral-red head and tail
-    index: 9, base: '#0a1230', pattern: '#2fb4ff', belly: '#0e1838', alt: '#ff3d2e',
+    index: 9, base: '#0a1230', pattern: '#2fb4ff', belly: '#0e1838', alt: '#ee2f26',
     rim: '#3a7aff', rimStrength: 0.5, roughness: 0.28, clearcoat: 0.9, keel: 0.0,
     iridescence: 0, sheen: 0.2, emissive: 0.8, iris: '#181414', pupil: 0, eyeGlow: 0, horns: false, tongue: '#1a1420',
-    extra: '#ff7a52', eyeScale: 0.78,
+    extra: '#ff6a48', eyeScale: 0.78,
   },
   paradise: {
     // black scales edged lime green, orange-red stars down the spine

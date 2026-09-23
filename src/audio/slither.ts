@@ -116,8 +116,33 @@ export class Slither {
     this.started = true;
   }
 
-  private crackle(b: BiomeId): AudioBuffer {
-    return this.crackles.get(b) ?? runGen(this.crackleTask(b))!;
+  /** Cached crackle loop; realtime returns null until the idle job has rendered it. */
+  private crackle(b: BiomeId): AudioBuffer | null {
+    return this.crackles.get(b) ?? (this.synth.sync ? runGen(this.crackleTask(b)) : null);
+  }
+  private crackleWant: BiomeId | null = null;
+
+  /** Called from the scheduler tick: swaps in a crackle loop once its job has finished. */
+  poll() {
+    const b = this.crackleWant;
+    if (b && this.started && this.crackles.has(b)) this.swapCrackle(b);
+  }
+
+  private swapCrackle(b: BiomeId) {
+    const buf = this.crackle(b);
+    if (!buf) { this.crackleWant = b; return; }
+    this.crackleWant = null;
+    const ctx = this.synth.ctx;
+    const t = ctx.currentTime;
+    const old = this.crackleSrc;
+    if (old) { try { old.stop(t + 0.3); } catch { /* */ } old.onended = () => { try { old.disconnect(); } catch { /* */ } }; }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(this.crackF);
+    src.start(t);
+    this.crackleSrc = src;
+    this.apply();
   }
 
   /** Chunked job pre-rendering a biome's crackle loop. */
@@ -162,14 +187,7 @@ export class Slither {
     this.crackF.type = tm.cType;
     this.crackF.frequency.setTargetAtTime(tm.cf, t, 0.2);
     this.crackF.Q.setTargetAtTime(tm.cq, t, 0.2);
-    const old = this.crackleSrc;
-    if (old) { try { old.stop(t + 0.3); } catch { /* */ } old.onended = () => { try { old.disconnect(); } catch { /* */ } }; }
-    const src = ctx.createBufferSource();
-    src.buffer = this.crackle(b);
-    src.loop = true;
-    src.connect(this.crackF);
-    src.start(t);
-    this.crackleSrc = src;
+    this.swapCrackle(b);
     this.apply();
   }
 

@@ -1,9 +1,10 @@
 // Audio test bench: ?dev=audio   (self-test: ?dev=audio&selftest=1[&wav=1])
 import { AudioEngine } from '../audio/AudioEngine';
 import type { UiSound } from '../audio/contract';
-import type { BiomeId, GameEvent, PowerupKind } from '../types';
+import type { BiomeId, GameEvent, PowerupKind, SkinId } from '../types';
 
-const BIOMES: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
+const BIOMES: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar', 'pinksands', 'vaadhoo', 'dallol', 'luna', 'mars', 'titan', 'kepler'];
+const CHARS: SkinId[] = ['obsidian', 'centipede', 'eel', 'dragon', 'mecha', 'train', 'comet'];
 const SCENES = ['menu', 'game', 'paused', 'over'] as const;
 const UIS: UiSound[] = ['hover', 'click', 'back', 'start', 'toggle', 'achievement', 'unlock', 'countdown', 'go'];
 const PU: PowerupKind[] = ['slow', 'ghost', 'magnet', 'double', 'shed'];
@@ -20,11 +21,20 @@ export async function runAudioDev(p: URLSearchParams) {
   document.head.appendChild(css);
   root.id = 'abench';
 
+  if (p.get('spectro')) { await spectro(root, p.get('spectro')!.split(',')); return; }
+
   if (p.get('selftest')) {
     root.innerHTML = '<h2>Audio self-test (offline render)</h2><pre id="out"></pre>';
     const out = root.querySelector('#out')!;
     const { runSelfTest } = await import('../audio/selftest');
-    const res = await runSelfTest({ wav: !!p.get('wav'), log: (s) => { console.log(s); out.textContent += s + '\n'; } });
+    const res = await runSelfTest({
+      wav: !!p.get('wav'), wavAll: !!p.get('wavall'), only: p.get('only') ?? undefined,
+      log: (s) => { console.log(s); out.textContent += s + '\n'; },
+    });
+    if (!p.get('only') || p.get('only')!.includes('perf')) {
+      const { runPerfTest } = await import('../audio/perftest');
+      res.metrics.perf = await runPerfTest((s) => { console.log(s); out.textContent += s + '\n'; });
+    }
     (window as unknown as Record<string, unknown>).__audioSelfTest = res;
     (window as unknown as Record<string, unknown>).__audioSelfTestDone = true;
     return;
@@ -68,6 +78,8 @@ export async function runAudioDev(p: URLSearchParams) {
 
   const bi = section('Biome');
   for (const b of BIOMES) btn(bi, 'biome-' + b, b, () => eng.setBiome(b));
+  const ch = section('Character (snake = slither loop, Legends = own loop + signature SFX)');
+  for (const c of CHARS) btn(ch, 'char-' + c, c, () => eng.setCharacter(c));
   const sc = section('Scene');
   for (const s of SCENES) btn(sc, 'scene-' + s, s, () => eng.setScene(s));
 
@@ -114,4 +126,80 @@ export async function runAudioDev(p: URLSearchParams) {
     const c = eng.audioCore;
     stat.textContent = c ? JSON.stringify({ state: eng.context?.state, ...c.stats() }) : 'locked (click Unlock)';
   }, 250);
+}
+
+/** QA: log-frequency spectrograms + RMS envelopes of .qa/audio-<name>.wav files. */
+async function spectro(root: HTMLElement, names: string[]) {
+  root.style.padding = '6px';
+  const W = 1180, H = 150;
+  for (const name of names) {
+    const label = document.createElement('div');
+    label.textContent = name;
+    label.style.cssText = 'font:12px monospace;color:#fc6;margin-top:4px';
+    root.appendChild(label);
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H + 30;
+    root.appendChild(cv);
+    const g = cv.getContext('2d')!;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H + 30);
+    try {
+      const ab = await (await fetch(`/.qa/audio-${name}.wav`)).arrayBuffer();
+      const oc = new OfflineAudioContext(1, 1, 44100);
+      const buf = await oc.decodeAudioData(ab);
+      const a = buf.getChannelData(0), b = buf.getChannelData(buf.numberOfChannels > 1 ? 1 : 0);
+      const sr = buf.sampleRate, N = 2048, n = a.length;
+      const img = g.createImageData(W, H);
+      const re = new Float64Array(N), im = new Float64Array(N);
+      const fLo = 40, fHi = 16000;
+      for (let x = 0; x < W; x++) {
+        const s0 = Math.floor((x / W) * (n - N));
+        for (let i = 0; i < N; i++) { re[i] = (a[s0 + i] + b[s0 + i]) * 0.5 * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N)); im[i] = 0; }
+        fft(re, im);
+        for (let y = 0; y < H; y++) {
+          const f = fLo * Math.pow(fHi / fLo, 1 - y / H);
+          const k = Math.min(N / 2 - 1, Math.round((f * N) / sr));
+          const m = Math.hypot(re[k], im[k]);
+          const db = 20 * Math.log10(m + 1e-9);
+          const v = Math.max(0, Math.min(1, (db + 40) / 70));
+          const o = (y * W + x) * 4;
+          img.data[o] = 255 * Math.min(1, v * 2); img.data[o + 1] = 255 * Math.max(0, v * 2 - 1); img.data[o + 2] = 255 * Math.max(0, 0.6 - v) * v * 3; img.data[o + 3] = 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+      g.fillStyle = '#8cf';
+      for (let x = 0; x < W; x++) {
+        const s0 = Math.floor((x / W) * n), s1 = Math.floor(((x + 1) / W) * n);
+        let e = 0; for (let i = s0; i < s1; i++) e += a[i] * a[i];
+        const db = 10 * Math.log10(e / Math.max(1, s1 - s0) + 1e-12);
+        const h = Math.max(0, (db + 60) / 60) * 28;
+        g.fillRect(x, H + 30 - h, 1, h);
+      }
+      g.fillStyle = '#fff'; g.font = '10px monospace';
+      for (let sec = 0; sec < buf.duration; sec++) g.fillRect(Math.round((sec / buf.duration) * W), H, 1, 4);
+      for (const f of [100, 1000, 10000]) g.fillText(f + 'Hz', 2, H * (1 - Math.log(f / fLo) / Math.log(fHi / fLo)));
+    } catch (e) { label.textContent += ' ERROR ' + String(e); }
+  }
+  (window as unknown as Record<string, unknown>).__spectroDone = true;
+}
+
+function fft(re: Float64Array, im: Float64Array) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const p = i + k, q = p + len / 2;
+        const br = re[q] * cr - im[q] * ci, bi2 = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - br; im[q] = im[p] - bi2; re[p] += br; im[p] += bi2;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
 }

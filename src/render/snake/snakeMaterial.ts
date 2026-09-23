@@ -333,33 +333,35 @@ void snakeSurface() {
     float t = (s - headLen * 1.3) / 0.64;
     float fy = fract(t) - 0.5;          // 0 = centre of a pale dorsal rectangle
     float fy2 = fract(t + 0.5) - 0.5;   // 0 = waist of a dark hourglass
-    float wob = (n - 0.5) * 0.07;
+    float wob = (n - 0.5) * 0.06;
     // dark hourglass: narrow waist on the spine, bulbs spreading down both flanks
-    float dH = max(abs(fy2) - (0.07 + 0.5 * alat), alat - 0.56) + wob;
-    // pale buff rectangle on the spine between hourglasses
-    float dR = max(alat - 0.13, abs(fy) - 0.3) + wob * 0.6;
+    float dH = max(abs(fy2) - (0.06 + 0.62 * alat), alat - 0.46) + wob;
+    // buff rectangle on the spine between hourglasses
+    float dR = max(alat - 0.12, abs(fy) - 0.29) + wob * 0.6;
     // dark flank triangles pointing up, under each rectangle
-    float tri = (alat - 0.6) / 0.26;
-    float dT = max(abs(fy) - 0.42 * tri, max(-tri * 0.25, alat - 0.9)) + wob;
+    float tri = (alat - 0.44) / 0.3;
+    float dT = max(abs(fy) - 0.44 * tri, max(-tri * 0.25, alat - 0.8)) + wob;
     float inH = aaStep(0.0, -dH), inR = aaStep(0.0, -dR), inT = aaStep(0.0, -dT);
-    float pale = max(max(aaBand(0.0, 0.035, dH), aaBand(0.0, 0.03, dT)), aaBand(0.0, 0.026, dR));
+    float pale = max(max(aaBand(0.0, 0.03, dH), aaBand(0.0, 0.026, dT)), aaBand(0.0, 0.022, dR));
     vec3 dark = uCPat * (0.85 + 0.3 * h2 * det);
-    col = mix(col, mix(dark, dark * vec3(1.55, 1.3, 1.45), aaStep(0.0, -(dH + 0.14)) * 0.5), inH);
-    vec3 buff = uCAlt * (0.92 + 0.14 * n);
-    float dots = 1.0 - aaStep(1.0, length(vec2(lat / 0.045, (abs(fy) - 0.14) / 0.065)));
-    col = mix(col, mix(buff, dark, dots * 0.9), inR);
-    col = mix(col, mix(dark, uCBase * 0.78, aaStep(0.0, -(dT + 0.07)) * 0.75), inT);
-    col = mix(col, uCExtra * (0.95 + 0.08 * h1), pale * 0.85);
+    // hourglass: very dark rim, purplish-brown heart
+    col = mix(col, mix(dark, dark * vec3(1.9, 1.5, 1.7), aaStep(0.0, -(dH + 0.1)) * 0.55), inH);
+    vec3 buff = uCAlt * (0.9 + 0.16 * n);
+    float stripe = 1.0 - aaStep(0.03, alat);
+    float dots = 1.0 - aaStep(1.0, length(vec2(lat / 0.035, (abs(fy) - 0.15) / 0.05)));
+    col = mix(col, mix(mix(buff, uCBase * 0.9, stripe * 0.6), dark * 1.3, dots * 0.8), inR);
+    col = mix(col, mix(dark, uCBase * 0.72, aaStep(0.0, -(dT + 0.08)) * 0.8), inT);
+    col = mix(col, uCExtra * (0.9 + 0.1 * h1), pale * 0.8);
     col = mix(col, uCBelly * (0.9 + 0.15 * n), bellyT);
     col = mix(col, uCPat * 1.4, bm * step(h2, 0.1) * 0.5 * det);
     // head: pale buff with a thin dark centre line and a dark triangle behind each eye
     float hmk = 1.0 - aaStep(headLen * 0.97, sTip);
-    vec3 headC = mix(uCAlt, uCExtra, 0.55) * (0.94 + 0.1 * h1 * det);
+    vec3 headC = mix(uCAlt, uCExtra, 0.3) * (0.92 + 0.12 * h1 * det) * (0.94 + 0.12 * n);
     col = mix(col, headC, hmk);
-    float midL = (1.0 - aaStep(0.018 + 0.012 * sTip / headLen, alat)) * aaStep(headLen * 0.12, sTip);
+    float midL = (1.0 - aaStep(0.012 + 0.008 * sTip / headLen, alat)) * aaStep(headLen * 0.12, sTip);
     float eyeS = uR * 1.45;
     float triE = aaStep(0.0, (alat - 0.3) - max(0.0, 0.2 - (sTip - eyeS) / uR * 0.18)) * aaStep(eyeS, sTip) * (1.0 - aaStep(0.62, alat));
-    col = mix(col, uCPat * 1.1, max(midL, triE) * hmk * 0.92);
+    col = mix(col, uCPat * 1.2, max(midL, triE) * hmk * 0.9);
     bk = 0.26;
   } else if (uSkin == 9) { // blue malaysian coral snake
     col = uCBase * (0.88 + 0.24 * h1 * det);
@@ -380,8 +382,8 @@ void snakeSurface() {
     emit = blue * (sk * 0.5 + halo * (1.0 - stripe) * (1.0 - red) * 0.06) * uEmitK + redC * red * uEmitK * 0.2;
     bk = 0.34;
   } else if (uSkin == 10) { // paradise flying snake
-    float edge = smoothstep(0.4, 0.8, sc.e) * (sc.q.y > -0.35 ? 1.0 : 0.55);
-    float ek = mix(0.42, edge, det);
+    float edge = smoothstep(0.58, 0.86, sc.e) * (sc.q.y > -0.35 ? 1.0 : 0.55);
+    float ek = mix(0.3, edge, det);
     float bn = sfbm(vec2(lat * 3.0, s * 2.0));
     float band = smoothstep(0.45, 0.85, 0.5 + 0.5 * sin(s * 3.4 + 0.6) + (bn - 0.5) * 0.7);
     float gk = ek * mix(1.0, 0.3, band * (1.0 - smoothstep(0.3, 0.65, alat)));
@@ -414,7 +416,7 @@ void snakeSurface() {
     col = mix(col, uCAlt, (1.0 - smoothstep(0.0, 0.45, alat)) * 0.4 * n);
     float bw = smoothstep(0.72, 0.84, alat);
     col = mix(col, uCBelly * (0.92 + 0.1 * h2), bw);
-    sFilm = h1 * 0.55 + h2 * 0.2 + s * 0.11 + n * 0.9;
+    sFilm = h1 * 0.1 + s * 0.07 + n * 0.6;
     irid = 1.0 - bw * 0.7;
     bk = 0.5;
   } else if (uSkin == 12) { // eyelash viper, golden morph
@@ -422,11 +424,13 @@ void snakeSurface() {
     float n2 = sfbm(vec2(lat * 6.0 + 4.0, s * 5.0));
     col = uCBase * (0.9 + 0.2 * h1 * det);
     col = mix(col, col * vec3(1.04, 0.84, 0.52), smoothstep(0.5, 0.8, n) * 0.38);
-    float fk = 0.04 + 0.16 * smoothstep(0.45, 0.8, n2);
-    float frk = step(h2, fk) * (1.0 - smoothstep(0.32, 0.58, sc.e));
-    vec3 fc = mix(uCPat, uCExtra, step(h1, 0.35));
+    float fk = 0.02 + 0.1 * smoothstep(0.5, 0.8, n2);
+    float frk = step(h2, fk) * (1.0 - smoothstep(0.2, 0.42, sc.e));
+    vec3 fc = mix(uCPat, uCExtra, step(h1, 0.3));
     col = mix(col, fc, frk * det * 0.95);
-    col *= 1.0 - (1.0 - det) * fk * 0.8;
+    // freckle clusters that still read from gameplay distance
+    float fpat = smoothstep(0.74, 0.86, svn(vec2(lat * 10.0, s * 7.5) + 3.0)) * smoothstep(0.35, 0.7, n2);
+    col = mix(col, mix(col, uCPat, 0.55), fpat * (1.0 - det * 0.6));
     col = mix(col, uCBelly * (0.95 + 0.08 * h1), bellyT);
     bk = 0.22;
   } else if (uSkin == 13) { // mangrove cat snake
@@ -442,6 +446,7 @@ void snakeSurface() {
     col = mix(col, uCPat * (0.9 + 0.2 * h2 * det), ring);
     // head: black crown, yellow lips (labials keep dark sutures) and chin / throat
     float chin = hm * smoothstep(0.6, 0.78, alat);
+    labM = hm * smoothstep(0.39, 0.45, alat) * step(uR * 0.12, sTip);
     float throat = (1.0 - smoothstep(headLen, headLen * 1.5, sTip)) * smoothstep(0.62, 0.85, alat);
     col = mix(col, uCAlt * (0.92 + 0.12 * h1), clamp(max(max(labM, chin), throat), 0.0, 1.0));
     bk = 0.3;
@@ -458,10 +463,12 @@ void snakeSurface() {
     neb = mix(neb, uCPat * 0.8, smoothstep(0.38, 0.78, c1));
     neb = mix(neb, uCAlt * 0.9, smoothstep(0.55, 0.85, c2) * smoothstep(0.35, 0.7, c1));
     neb = mix(neb, uCExtra * 0.85, smoothstep(0.6, 0.85, c2 * (1.2 - c1)) * 0.6);
+    // bright filaments along cloud fronts
+    neb += (uCAlt * 0.5 + uCPat * 0.3) * pow(1.0 - abs(c1 - 0.62) * 6.0, 3.0) * step(abs(c1 - 0.62), 0.166) * 0.6;
     neb *= 0.45 + 0.55 * smoothstep(0.3, 0.62, sfbm(p2 * 1.8 + 11.0));
-    float st1 = starField((wp - nW.xy * 0.3) * 9.0 + 100.0, 0.5, 0.09, uTime * 1.3);
-    float st2 = starField((wp - nW.xy * 0.12) * 3.3 + 31.0, 0.3, 0.07, uTime);
-    float stars = st1 * 0.9 + st2 * 2.4;
+    float st1 = starField((wp - nW.xy * 0.3) * 8.0 + 100.0, 0.55, 0.13, uTime * 1.3);
+    float st2 = starField((wp - nW.xy * 0.12) * 3.0 + 31.0, 0.32, 0.1, uTime);
+    float stars = st1 * 1.2 + st2 * 3.0;
     col = neb * 0.35 + vec3(0.01, 0.008, 0.025);
     col = mix(col, uCBelly, bellyT * 0.6);
     emit = (neb * 0.55 + vec3(0.92, 0.9, 1.0) * stars) * uEmitK * (1.0 - bellyT * 0.6);
@@ -477,7 +484,9 @@ void snakeSurface() {
     sFilm = h1 * 0.6 + s * 0.05;
     vec3 Vw = isOrthographic ? normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2])) : normalize(cameraPosition - vWP);
     float ndv0 = clamp(dot(normalize(vWN), Vw), 0.0, 1.0);
-    sAlpha = mix(1.0, mix(0.26, 0.92, pow(1.0 - ndv0, 2.0)), uGlassA);
+    sAlpha = mix(1.0, mix(0.3, 0.95, pow(1.0 - ndv0, 1.6)), uGlassA);
+    // thick glass at grazing angles refracts the darker surroundings: dark cool edge band
+    col *= mix(vec3(1.0), vec3(0.42, 0.55, 0.68), smoothstep(0.3, 0.85, 1.0 - ndv0) * (1.0 - uGlassA * 0.5));
     rough = uRough + border * det * 0.2;
     cc = 1.0;
     irid = 0.6 + 0.4 * h1;
@@ -633,12 +642,12 @@ vWN = normalize(mat3(modelMatrix) * objectNormal);`);
       float tw = 0.55 + 0.45 * sin(uTime * 2.7 + sFacet.x * 40.0);
       float glint = (pow(nh1, 260.0) * 3.2 * tw + pow(nh1, 40.0) * 0.12) * sDet;
       float glint2 = pow(nh2, 260.0) * 3.2 * tw * sDet * has2;
-      float sp = starField(vec2(vSUv.x * 44.0, vSUv.y * 1.6), 0.16, 0.09, uTime * 2.2);
+      float sp = starField(vec2(vSUv.x * 44.0, vSUv.y * 1.6), 0.2, 0.12, uTime * 2.2);
       vec2 cp = vWP.xy * 3.2;
       float ca = pow(ridged(cp + vec2(uTime * 0.35, uTime * 0.2)) * ridged(cp * 1.37 - vec2(uTime * 0.27, -uTime * 0.31) + 5.0), 7.0);
-      totalEmissiveRadiance += (uCRim * uSunCol * fres * 0.5
+      totalEmissiveRadiance += (uCRim * (uSunCol * 0.6 + 0.25) * fres * 0.9
         + uSunCol * glint + uSun2Col * glint2
-        + vec3(0.9, 0.97, 1.0) * sp * 1.1 * sDet
+        + vec3(0.9, 0.97, 1.0) * sp * 1.6
         + uCExtra * uSunCol * ca * 0.3 * (1.0 - fres)) * dk;
     }
   }

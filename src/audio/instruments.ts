@@ -59,6 +59,11 @@ export class Synth {
   readonly rng: Rng;
   /** When true (offline rendering) missing buffers are rendered synchronously. */
   sync = false;
+  /**
+   * Realtime: called instead of rendering an uncached KS note on the main thread (the note is
+   * skipped and rendered in an idle job). Without a handler the note renders synchronously.
+   */
+  onMiss: ((kind: PluckKind, midi: number) => void) | null = null;
   constructor(readonly ctx: BaseAudioContext, seed = 1) {
     this.rng = mulberry32(seed);
   }
@@ -140,6 +145,7 @@ export class Synth {
 
   pluck(v: Voice, t: number, kind: PluckKind, midi: number, dur: number, vel: number,
     o: { bend?: number; bendAt?: number; bendBack?: boolean; pan?: number; cents?: number; slide?: number } = {}) {
+    if (!this.sync && this.onMiss && !this.hasKs(kind, midi)) { this.onMiss(kind, Math.round(midi)); return; }
     const buf = this.ks(kind, midi);
     const src = v.buffer(buf);
     const r = this.rate(o.cents ?? 0);
@@ -468,7 +474,7 @@ export class Synth {
       case 'bell': this.bell(v, t, m, Math.max(1.2, dur), vel * 0.45, { pan: o.pan }); break;
       case 'pan': this.steelPan(v, t, m, Math.max(0.9, dur), vel * 0.5, { pan: o.pan }); break;
       case 'mallet': this.mallet(v, t, m, Math.max(1.2, dur), vel * 0.5, { pan: o.pan }); break;
-      case 'theremin': this.theremin(v, t, m, Math.min(1.2, Math.max(0.5, dur)), vel * 0.3, { pan: o.pan }); break;
+      case 'theremin': this.theremin(v, t, m, Math.min(1.0, Math.max(0.45, dur)), vel * 0.2, { pan: o.pan }); break;
       case 'analog': this.analog(v, t, m, Math.min(0.9, Math.max(0.35, dur)), vel * 0.36, { pan: o.pan, cutoff: 900, env: 5, q: 4 }); break;
       case 'crystal': this.crystal(v, t, m, Math.max(1.4, dur), vel * 0.4, { pan: o.pan }); break;
       case 'sonar': this.sonar(v, t, m, Math.max(1.4, dur), vel * 0.6, { pan: o.pan }); break;

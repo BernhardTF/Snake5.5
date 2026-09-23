@@ -78,7 +78,8 @@ export function sweep(
   const V = radial + 1;
   for (let i = 0; i < n - 1; i++) for (let j = 0; j < radial; j++) {
     const a = i * V + j, b = a + 1, c = a + V, d = c + 1;
-    idx.push(a, c, b, b, c, d);
+    // wound so front faces point outward (matching the normals)
+    idx.push(a, b, c, b, d, c);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -249,7 +250,8 @@ export function surface(nu: number, nv: number, f: (u: number, v: number, out: T
 export function facetRock(seed: number, opts: { detail?: number; cuts?: number; jag?: number; scale?: THREE.Vector3; floor?: number | null } = {}) {
   const r = rng(seed);
   const detail = opts.detail ?? 1, cuts = opts.cuts ?? 7, jag = opts.jag ?? 0.35;
-  const g = new THREE.IcosahedronGeometry(1, detail).toNonIndexed();
+  const g0 = new THREE.IcosahedronGeometry(1, detail);
+  const g = g0.index ? g0.toNonIndexed() : g0;
   g.deleteAttribute('uv'); g.deleteAttribute('normal');
   const p = g.getAttribute('position');
   const planes: { n: THREE.Vector3; d: number }[] = [];

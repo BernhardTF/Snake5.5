@@ -56,3 +56,14 @@ export function dustDevilPos(
 ): { x: number; y: number; r: number } {
   return dustDevilPosInto({ x: 0, y: 0, r: 0 }, time, index, boardW, boardH);
 }
+
+/**
+ * How active dust devil `index` is at `time` (0 = calm, 1 = full column). Devils come and go over
+ * roughly a minute, so they read as occasional; each is active a bit over half the time.
+ */
+export function dustDevilStrength(time: number, index: number): number {
+  const i = index <= 0 ? 0 : 1;
+  const s = 0.5 + 0.5 * Math.sin(time * (i ? 0.0157 : 0.0191) * 6.2832 + i * 2.6);
+  const x = Math.min(1, Math.max(0, (s - 0.3) / 0.35));
+  return x * x * (3 - 2 * x);
+}

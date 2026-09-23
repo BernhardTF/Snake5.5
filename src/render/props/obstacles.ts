@@ -126,45 +126,52 @@ function brainCoral(seed: number): THREE.BufferGeometry {
     }, new THREE.Vector3(1, 0.92, 0.62), -0.3);
 }
 
+/**
+ * Staghorn branch coral: low, radiating arms that fork in-plane so the silhouette from straight
+ * above reads as an antler/star with clear gaps (not a blob). Dark core, pale polyp tips.
+ */
 function branchCoral(seed: number): THREE.BufferGeometry {
   const r = rng(seed);
-  const pal = [[C('#7a3a8a'), C('#d8a0e0')], [C('#d0501a'), C('#ffb070')], [C('#c83a5a'), C('#ffb0c0')]][seed % 3];
+  const pal = [[C('#4a2266'), C('#e8b8ff')], [C('#a8360f'), C('#ffd79a')], [C('#9c2448'), C('#ffd0dc')]][seed % 3];
   const geos: THREE.BufferGeometry[] = [];
-  const grow = (p: THREE.Vector3, dir: THREE.Vector3, len: number, rad: number, depth: number) => {
+  const colAt = (k: number) => lerpC(pal[0], pal[1], Math.pow(Math.min(1, k), 1.3));
+  const grow = (p: THREE.Vector3, yaw: number, pitch: number, len: number, rad: number, depth: number) => {
     const pts: THREE.Vector3[] = [], rr: number[] = [];
     const q = p.clone();
-    const d = dir.clone();
     const n = 5;
+    let pz = pitch;
     for (let i = 0; i <= n; i++) {
-      pts.push(q.clone()); rr.push(rad * (1 - 0.35 * i / n));
-      d.x += (r() - 0.5) * 0.25; d.y += (r() - 0.5) * 0.25; d.z += 0.06; d.normalize();
-      q.addScaledVector(d, len / n);
+      pts.push(q.clone()); rr.push(rad * (1 - 0.3 * i / n));
+      const cp = Math.cos(pz);
+      q.add(new THREE.Vector3(Math.cos(yaw) * cp, Math.sin(yaw) * cp, Math.sin(pz)).multiplyScalar(len / n));
+      yaw += (r() - 0.5) * 0.18;
+      pz += 0.05; // tips curl gently upward
     }
     const t0 = depth / 3;
-    geos.push(sweep(pts, rr, 7, 1, (t) => lerpC(pal[0], pal[1], t0 + t / 3)));
-    // tip cap
-    const s = new THREE.SphereGeometry(rad * 0.68, 7, 5);
-    s.translate(q.x, q.y, q.z);
-    geos.push(prep(s, lerpC(pal[0], pal[1], t0 + 0.34)));
+    geos.push(sweep(pts, rr, 7, 1, (t) => colAt(t0 + t / 3)));
+    const end = pts[n];
     if (depth < 2) {
-      const k = 2 + (r() < 0.5 ? 1 : 0);
-      for (let i = 0; i < k; i++) {
-        const nd = d.clone().add(new THREE.Vector3((r() - 0.5) * 1.1, (r() - 0.5) * 1.1, 0.45)).normalize();
-        grow(q, nd, len * 0.75, rad * 0.7, depth + 1);
-      }
+      const spread = 0.38 + r() * 0.2;
+      grow(end, yaw - spread, pz + 0.05, len * 0.74, rr[n] * 0.95, depth + 1);
+      grow(end, yaw + spread, pz + 0.05, len * 0.74, rr[n] * 0.95, depth + 1);
+    } else {
+      const s = new THREE.SphereGeometry(rr[n] * 1.25, 7, 5);
+      s.translate(end.x, end.y, end.z);
+      geos.push(prep(s, pal[1].clone().lerp(new THREE.Color(1, 1, 1), 0.25)));
     }
   };
-  const trunks = 6 + Math.floor(r() * 3);
-  for (let i = 0; i < trunks; i++) {
-    const a = (i / trunks) * Math.PI * 2 + r() * 0.5;
-    const d0 = 0.1 + r() * 0.25;
-    grow(new THREE.Vector3(Math.cos(a) * d0, Math.sin(a) * d0, 0), new THREE.Vector3(Math.cos(a) * 0.55, Math.sin(a) * 0.55, 0.85).normalize(), 0.3 + r() * 0.12, 0.085, 0);
+  const arms = 5 + Math.floor(r() * 3);
+  for (let i = 0; i < arms; i++) {
+    const yaw = (i / arms) * Math.PI * 2 + (r() - 0.5) * 0.4;
+    grow(new THREE.Vector3(Math.cos(yaw) * 0.08, Math.sin(yaw) * 0.08, 0.1), yaw, 0.42 + r() * 0.22, 0.42 + r() * 0.1, 0.085, 0);
   }
-  // rounded base mound
-  const mound = new THREE.SphereGeometry(0.45, 12, 8);
-  mound.scale(1, 1, 0.35);
-  geos.push(prep(mound, pal[0].clone().multiplyScalar(0.7)));
-  return merge(geos);
+  // knobbly dark base
+  const mound = new THREE.SphereGeometry(0.26, 12, 8);
+  mound.scale(1, 1, 0.55);
+  geos.push(prep(mound, pal[0].clone().multiplyScalar(0.6)));
+  const g = merge(geos);
+  fitUnit([g], 1);
+  return g;
 }
 
 function coconut(seed: number, centered = false): { geo: THREE.BufferGeometry; eyes: THREE.BufferGeometry } {
@@ -203,7 +210,7 @@ function lagoon(seed: number, big: boolean, round = false): ObstacleGeo {
     return { geo: merge(parts), mat: mats.coral };
   }
   if (kind === 3) { const c = coconut(seed); const g = merge([c.geo, c.eyes]); g.scale(1.6, 1.6, 1.6); return { geo: g, mat: mats.coral }; }
-  if (kind === 1) { const g = branchCoral(seed); g.scale(1.5, 1.5, 1.2); return { geo: g, mat: mats.coral }; }
+  if (kind === 1) { const g = branchCoral(seed); g.scale(1, 1, 1.25); return { geo: g, mat: mats.coral }; }
   return { geo: brainCoral(seed), mat: mats.coral };
 }
 
@@ -214,47 +221,62 @@ function basalt(seed: number, round = false): ObstacleGeo {
       (p) => lerpC(C('#1c1c1e'), C('#3a3a3e'), noise3(p.x * 10, p.y * 10, p.z * 10, seed)), new THREE.Vector3(1, 1, 1), -10);
     return { geo: g, mat: mats.rockFlat };
   }
+  // Hex columns with strong height cues for a top-down camera: top-face brightness keyed to
+  // column height, a bright cool rim bevel on every top edge, near-black AO'd sides.
   const r = rng(seed);
-  const geos: THREE.BufferGeometry[] = [];
   const hexR = 0.2;
   const cells: [number, number][] = [];
   for (let q = -3; q <= 3; q++) for (let s = -3; s <= 3; s++) {
     const x = hexR * 1.75 * (q + s * 0.5), y = hexR * 1.52 * s;
     if (Math.hypot(x, y) < 0.92) cells.push([x, y]);
   }
-  for (const [x, y] of cells) {
+  const hs = cells.map(([x, y]) => {
     const d = Math.hypot(x, y);
-    const h = Math.max(0.15, (1 - d * 0.6) * (0.35 + r() * 1.0));
-    const g = new THREE.CylinderGeometry(hexR * 0.8, hexR * 0.97, h, 6, 1, false);
-    g.rotateX(Math.PI / 2);
-    g.translate(0, 0, h / 2 - 0.05);
-    g.rotateZ(Math.PI / 6);
-    // tilt tops slightly
-    const p = g.getAttribute('position');
-    const tx = (r() - 0.5) * 0.12, ty = (r() - 0.5) * 0.12;
-    for (let i = 0; i < p.count; i++) {
-      const z = p.getZ(i);
-      if (z > h / 2) p.setZ(i, z + p.getX(i) * tx + p.getY(i) * ty);
+    return Math.max(0.14, (1.05 - d * 0.75) * (0.45 + r() * 0.95));
+  });
+  const hMax = Math.max(...hs);
+  const pos: number[] = [], col: number[] = [];
+  const topC = C('#767b84'), rimC = C('#b9d9dc'), sideTop = C('#2c2e33'), sideBot = C('#0b0b0d');
+  const tri = (a: number[], b: number[], c: number[], ca: THREE.Color, cb: THREE.Color, cc: THREE.Color) => {
+    pos.push(...a, ...b, ...c);
+    col.push(ca.r, ca.g, ca.b, cb.r, cb.g, cb.b, cc.r, cc.g, cc.b);
+  };
+  cells.forEach(([x, y], ci) => {
+    const h = hs[ci], hn = h / hMax;
+    const R = hexR * 0.97, Ri = R * 0.74, bev = 0.07;
+    const tx = (r() - 0.5) * 0.14, ty = (r() - 0.5) * 0.14;
+    const zt = (px: number, py: number) => h + px * tx + py * ty;
+    const shade = 0.75 + r() * 0.35;
+    const top = topC.clone().multiplyScalar((0.22 + 0.95 * Math.pow(hn, 1.2)) * shade);
+    const topHi = top.clone().multiplyScalar(1.12);
+    const rim = rimC.clone().multiplyScalar((0.35 + 0.75 * hn) * shade);
+    const sT = sideTop.clone().multiplyScalar(0.7 + 0.5 * hn), sB = sideBot;
+    const ring = (rad: number, dz: number) => {
+      const out: number[][] = [];
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+        out.push([x + px, y + py, zt(px, py) + dz]);
+      }
+      return out;
+    };
+    const inner = ring(Ri, 0), outer = ring(R, -bev);
+    const cen = [x, y, zt(0, 0) + 0.005];
+    for (let k = 0; k < 6; k++) {
+      const k1 = (k + 1) % 6;
+      tri(cen, inner[k], inner[k1], topHi, top, top);
+      tri(inner[k], outer[k], outer[k1], rim, rim, rim);
+      tri(inner[k], outer[k1], inner[k1], rim, rim, rim);
+      const b0 = [outer[k][0], outer[k][1], -0.05], b1 = [outer[k1][0], outer[k1][1], -0.05];
+      tri(outer[k], b0, b1, sT, sB, sB);
+      tri(outer[k], b1, outer[k1], sT, sB, sT);
     }
-    g.translate(x, y, 0);
-    const ng = g.toNonIndexed();
-    ng.deleteAttribute('uv');
-    ng.computeVertexNormals();
-    const top = C('#50535a'), side = C('#26272b'), edge = C('#34363b');
-    const pn = ng.getAttribute('position'), nn = ng.getAttribute('normal');
-    const col = new Float32Array(pn.count * 3);
-    const sh = 0.55 + r() * 0.8;
-    for (let i = 0; i < pn.count; i++) {
-      const up = nn.getZ(i);
-      const z = pn.getZ(i);
-      let c = up > 0.8 ? top.clone() : lerpC(side, edge, noise3(pn.getX(i) * 8, pn.getY(i) * 8, z * 12, seed));
-      c = c.multiplyScalar(sh * (0.7 + 0.45 * Math.min(1, z / 0.9)));
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    }
-    ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    geos.push(ng);
-  }
-  return { geo: merge(geos), mat: mats.rockFlat };
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return { geo: g, mat: mats.rockFlat };
 }
 
 // ------------------------------------------------------------------ salar: salt mounds + cactus
@@ -352,7 +374,7 @@ const xmats = {
   brine: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02, metalness: 0 }),
   ice: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.25, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.8, 0.9, 1) }),
   crystal: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, flatShading: true, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 1.5 }), 'crystal'),
-  fungus: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.3, sheen: 0.5, sheenColor: new THREE.Color(0.8, 1, 1), emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 2.2 }), 'fungus'),
+  fungus: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.3, sheen: 0.2, sheenColor: new THREE.Color(0.8, 1, 1), emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 2.2 }), 'fungus'),
   hoverGlow: new THREE.MeshBasicMaterial({ color: 0x9a7aff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
 };
 
@@ -388,7 +410,7 @@ function queenConch(seed: number, lipScale = 1): THREE.BufferGeometry {
     const knob = Math.pow(Math.max(0, Math.cos(phi * 2.0 - 0.9)), 2) * Math.pow(Math.max(0, Math.cos(u * knobN * 6.28 * 0.9 + ph)), 5);
     rr *= 1 + 0.55 * knob * knobMask;
     o.set(-0.95 + 1.9 * u, c * rr, Math.max(-0.2, s * rr * 0.86));
-  });
+  }, true);
   colorize(body, (p, n) => {
     const u = (p.x + 0.95) / 1.9;
     const zig = Math.sin(u * 44 + Math.sin(Math.atan2(p.z, p.y) * 5) * 1.6 + ph);
@@ -398,20 +420,20 @@ function queenConch(seed: number, lipScale = 1): THREE.BufferGeometry {
     return c.multiplyScalar(0.9 + 0.2 * noise3(p.x * 14, p.y * 14, p.z * 14, seed));
   });
   // flared lip on +y, rising towards the spire
-  const pinkD = C('#e4586e'), salmon = C('#f7937e'), peach = C('#ffd7b0'), yell = C('#f8c46a');
+  const pinkD = C('#e0405e'), salmon = C('#f47a74'), peach = C('#ffc8a0'), yell = C('#f6b050');
   const lip = surface(28, 10, (u, w, o) => {
     const ux = 0.08 + 0.62 * u;
-    const W = (0.62 * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.08)), 0.6) + 0.04) * lipScale;
-    const y0 = rad(ux) * 0.92;
-    let z = W * (0.62 * w - 0.34 * w * w) + 0.03 + 0.2 * Math.pow(u, 3) * w;
+    const W = (0.86 * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.08)), 0.6) + 0.04) * lipScale;
+    const y0 = rad(ux) * 0.8;
+    let z = W * (0.7 * w - 0.38 * w * w) + 0.1 + 0.25 * Math.pow(u, 3) * w;
     z -= 0.05 * smoothstep(0.85, 1, w);
     o.set(-0.95 + 1.9 * ux + 0.12 * w * u, y0 + w * W, z);
   });
   colorize(lip, (p) => {
-    const w = Math.min(1, Math.max(0, (p.y - 0.1) / 0.62));
-    let c = lerpC(yell, pinkD, smoothstep(0.0, 0.3, w));
-    c = lerpC(c, salmon, smoothstep(0.35, 0.7, w));
-    c = lerpC(c, peach, smoothstep(0.75, 1, w));
+    const w = Math.min(1, Math.max(0, (p.y - 0.25) / 0.8));
+    let c = lerpC(yell, pinkD, smoothstep(0.0, 0.25, w));
+    c = lerpC(c, salmon, smoothstep(0.45, 0.8, w));
+    c = lerpC(c, peach, smoothstep(0.85, 1, w));
     return c.multiplyScalar(0.94 + 0.12 * noise3(p.x * 9, p.y * 9, 1, seed + 2));
   });
   const g = merge([prep(body, undefined), prep(lip, undefined)].map((x, i) => { x.setAttribute('color', (i ? lip : body).getAttribute('color')); return x; }));
@@ -500,10 +522,10 @@ function hermitConch(seed: number): ObstacleGeo {
 function pinksands(seed: number, v: number, big: boolean, rolling: boolean): ObstacleGeo {
   if (rolling) return hermitConch(seed);
   if (big) {
-    const bush = seaGrape(seed, true, 1.25);
-    bush.translate(0.25, 0.2, 0);
+    const bush = seaGrape(seed, true, 1.1);
+    bush.translate(0.4, 0.35, 0);
     const conch = queenConch(seed + 1);
-    conch.rotateZ(0.4); conch.scale(0.8, 0.8, 0.8); conch.translate(-0.55, -0.6, 0);
+    conch.rotateZ(0.5); conch.scale(0.75, 0.75, 0.75); conch.translate(-0.75, -0.75, 0);
     fitUnit([bush, conch], 1);
     return { geo: conch, mat: xmats.shell, extra: [{ geo: bush, mat: xmats.leaf }] };
   }
@@ -522,7 +544,7 @@ function pinksands(seed: number, v: number, big: boolean, rolling: boolean): Obs
 
 // ------------------------------------------------------------------ vaadhoo: driftwood, dark coral rock
 function woodColor(seed: number) {
-  const pale = C('#cfc7b6'), grey = C('#978f82'), crack = C('#3a3129'), warm = C('#b8a58a');
+  const pale = C('#f6f2e8'), grey = C('#c4beb2'), crack = C('#4a4036'), warm = C('#dccbb0');
   return (t: number, a: number) => {
     const grain = noise3(t * 26, a * 9, 0, seed);
     let c = lerpC(grey, pale, grain * 0.9 + 0.15);
@@ -549,13 +571,13 @@ function branchSweep(p0: THREE.Vector3, dir: THREE.Vector3, len: number, r0: num
 function driftwood(seed: number, kind: number): THREE.BufferGeometry {
   const r = rng(seed);
   const geos: THREE.BufferGeometry[] = [];
-  const R = 0.2 + r() * 0.05, bend = (r() - 0.5) * 0.4;
+  const R = 0.36 + r() * 0.06, bend = (r() - 0.5) * 0.45;
   const pts: THREE.Vector3[] = [], rr: number[] = [];
   const n = 14;
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const rad = R * (1 + 0.18 * (noise3(t * 6, 0, 0, seed) - 0.5) * 2) * (0.78 + 0.22 * Math.sin(Math.PI * Math.min(1, t * 1.2 + 0.1)));
-    pts.push(new THREE.Vector3(-1 + 2 * t, bend * Math.sin(Math.PI * t), rad * 0.92));
+    pts.push(new THREE.Vector3(-0.85 + 1.7 * t, bend * Math.sin(Math.PI * t), rad * 0.92));
     rr.push(rad);
   }
   geos.push(sweep(pts, rr, 12, 1, woodColor(seed)));
@@ -568,12 +590,12 @@ function driftwood(seed: number, kind: number): THREE.BufferGeometry {
     const e = pts[0];
     for (let k = 0; k < 7; k++) {
       const a = Math.PI + (k / 6 - 0.5) * 2.6 + (r() - 0.5) * 0.3;
-      branchSweep(e.clone().add(new THREE.Vector3(0.05, 0, 0)), new THREE.Vector3(Math.cos(a), Math.sin(a), 0.25 + r() * 0.5), 0.3 + r() * 0.3, R * 0.45, seed + k * 7, geos, 0.12);
+      branchSweep(e.clone().add(new THREE.Vector3(0.05, 0, 0)), new THREE.Vector3(Math.cos(a), Math.sin(a), 0.1 + r() * 0.3), 0.22 + r() * 0.2, R * 0.5, seed + k * 7, geos, 0.12);
     }
   } else if (kind === 2) {
     const m = pts[Math.floor(n * 0.45)];
     const s = r() < 0.5 ? -1 : 1;
-    branchSweep(m, new THREE.Vector3(0.75, s * 0.65, 0.05), 1.0, R * 0.72, seed + 3, geos, 0.02);
+    branchSweep(m, new THREE.Vector3(0.75, s * 0.65, 0.05), 0.85, R * 0.72, seed + 3, geos, 0.02);
     branchSweep(pts[Math.floor(n * 0.75)], new THREE.Vector3(0.4, -s * 0.9, 0.3), 0.35, R * 0.4, seed + 5, geos, 0.1);
   } else {
     for (let k = 0; k < 2; k++) {
@@ -610,7 +632,7 @@ function coralRock(seed: number, scale = new THREE.Vector3(1, 0.86, 0.62)): THRE
   const g = blob(4,
     (p) => 1 + (fbm3(p.x * 1.4 + o, p.y * 1.4, p.z * 1.4, seed, 4) - 0.5) * 0.55 - pit(p) * 0.09 + (noise3(p.x * 13, p.y * 13, p.z * 13, seed + 1) - 0.5) * 0.06,
     (p, n) => {
-      const base = C('#262a31'), top = C('#565e68'), hole = C('#0d0f13'), crust = C('#a8a69a');
+      const base = C('#2a2f37'), top = C('#6c7682'), hole = C('#0d0f13'), crust = C('#b4b2a4');
       let c = lerpC(base, top, smoothstep(0.1, 0.95, n.z) * 0.8 + fbm3(p.x * 3, p.y * 3, p.z * 3 + o, seed + 5, 3) * 0.3 - 0.15);
       const cr = noise3(p.x * 9 + o, p.y * 9, p.z * 9, seed + 7);
       if (cr > 0.72) c = lerpC(c, crust, (cr - 0.72) * 3.2);
@@ -625,7 +647,7 @@ function coralRock(seed: number, scale = new THREE.Vector3(1, 0.86, 0.62)): THRE
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
     const sp = noise3(v.x * 16 + o, v.y * 16, v.z * 16, seed + 11);
-    if (sp > 0.8 && v.z > 0.05) { a[i] = (sp - 0.8) * 5 * 0.5; col.setXYZ(i, glow.r, glow.g, glow.b); }
+    if (sp > 0.85 && v.z > 0.05) { a[i] = Math.min(1, (sp - 0.85) * 12) * 0.4; col.setXYZ(i, glow.r, glow.g, glow.b); }
   }
   g.setAttribute('aGlow', new THREE.BufferAttribute(a, 1));
   return g;
@@ -708,14 +730,14 @@ function saltPillar(seed: number, h: number, r0: number): THREE.BufferGeometry {
     p.setXYZ(i, v.x * k, v.y * k, v.z);
   }
   g.computeVertexNormals();
-  const white = C('#f7f5ee'), cream = C('#e6dab8'), rust = C('#c4702e'), green = C('#c6de98');
+  const white = C('#f2efe4'), cream = C('#d8c498'), rust = C('#b05a22'), green = C('#9cc878');
   colorize(g, (q, n) => {
     const t = q.z / h;
     const band = Math.sin(t * 26 + noise3(q.x * 3, q.y * 3, 0, seed) * 3 + o);
-    let c = lerpC(white, cream, smoothstep(0.2, 0.8, band));
-    c = lerpC(c, rust, smoothstep(0.86, 0.98, band) * (1 - smoothstep(0.8, 0.95, t)) * 0.9);
-    c = lerpC(c, green, (1 - smoothstep(0.0, 0.18, t)) * 0.7);
-    return lerpC(c, white, smoothstep(0.6, 0.95, n.z));
+    let c = lerpC(white, cream, smoothstep(0.0, 0.7, band));
+    c = lerpC(c, rust, smoothstep(0.72, 0.95, band) * (1 - smoothstep(0.85, 0.97, t)) * 0.95);
+    c = lerpC(c, green, (1 - smoothstep(0.0, 0.2, t)) * 0.8);
+    return lerpC(c, white, smoothstep(0.75, 0.98, n.z) * smoothstep(0.8, 0.95, t));
   });
   return g;
 }
@@ -769,7 +791,7 @@ function dallol(seed: number, v: number, big: boolean, rolling: boolean): Obstac
 
 // ------------------------------------------------------------------ luna: ejecta boulders
 function moonRockColor(seed: number) {
-  const base = C('#8a8883'), light = C('#b6b3ac'), dark = C('#55534f');
+  const base = C('#96938c'), light = C('#c4c0b8'), dark = C('#55534f');
   return (g: THREE.BufferGeometry) => {
     const p = g.getAttribute('position'), n = g.getAttribute('normal');
     const col = new Float32Array(p.count * 3);
@@ -811,7 +833,7 @@ function luna(seed: number, v: number, big: boolean, rolling: boolean): Obstacle
   };
   if (big) {
     // small crater with a raised rim, boulders thrown on it
-    const prof: [number, number][] = [[0.001, 0.015], [0.4, 0.02], [0.62, 0.1], [0.8, 0.22], [0.9, 0.2], [1.02, 0.08], [1.18, 0.0]];
+    const prof: [number, number][] = ([[0.001, 0.015], [0.4, 0.02], [0.62, 0.1], [0.8, 0.22], [0.9, 0.2], [1.02, 0.08], [1.18, 0.0]] as [number, number][]).reverse();
     const rim = lathe(prof, 40);
     const p = rim.getAttribute('position');
     for (let i = 0; i < p.count; i++) {
@@ -837,11 +859,11 @@ function luna(seed: number, v: number, big: boolean, rolling: boolean): Obstacle
     return { geo: g, mat: mats.rockFlat };
   }
   const el = v % 3 === 1;
-  add(seed, new THREE.Vector3(1, el ? 0.62 : 0.86, el ? 0.62 : 0.78), 0, 0, 0);
-  const peb = 2 + (v % 3);
+  add(seed, new THREE.Vector3(1, el ? 0.66 : 0.88, el ? 0.66 : 0.8), 0, 0, 0);
+  const peb = 1 + (v % 3);
   for (let k = 0; k < peb; k++) {
-    const a = r() * 6.28, s = 0.14 + r() * 0.14;
-    add(seed + 17 + k, new THREE.Vector3(s, s * 0.9, s * 0.7), Math.cos(a) * 0.95, Math.sin(a) * 0.95, r() * 6, 0);
+    const a = r() * 6.28, s = 0.1 + r() * 0.1;
+    add(seed + 17 + k, new THREE.Vector3(s, s * 0.9, s * 0.7), Math.cos(a) * 0.98, Math.sin(a) * 0.98, r() * 6, 0);
   }
   const g = merge(parts); fitUnit([g]);
   return { geo: g, mat: mats.rockFlat };
@@ -858,7 +880,7 @@ function ventifact(seed: number): THREE.BufferGeometry {
   const g = blob(4,
     (p) => {
       let d = 1 + (fbm3(p.x * 1.3 + o, p.y * 1.3, p.z * 1.3, seed, 4) - 0.5) * 0.4;
-      d += 0.055 * flute(p) * smoothstep(-0.1, 0.3, p.z);
+      d += 0.075 * flute(p) * smoothstep(-0.1, 0.3, p.z);
       // keel: pinch the upper flanks into a ridge along the wind
       d *= 1 - 0.18 * smoothstep(0.2, 0.9, p.z) * Math.abs(p.y);
       return d;
@@ -870,7 +892,7 @@ function ventifact(seed: number): THREE.BufferGeometry {
       c.multiplyScalar(0.85 + 0.3 * noise3(p.x * 10, p.y * 10, p.z * 10, seed));
       // rust dust in troughs + banked on the lee (+x), dusting on flat tops
       const lee = smoothstep(0.1, 0.8, p.x) * (1 - smoothstep(0.0, 0.35, p.z));
-      c = lerpC(c, rust, Math.max(smoothstep(-0.3, -0.95, f) * 0.55, lee * 0.8, (1 - smoothstep(0.0, 0.12, p.z)) * 0.7));
+      c = lerpC(c, rust, Math.max(smoothstep(-0.55, -0.98, f) * 0.45, lee * 0.7, (1 - smoothstep(0.0, 0.1, p.z)) * 0.6));
       c = lerpC(c, dust, smoothstep(0.8, 0.98, n.z) * smoothstep(0.55, 0.75, fbm3(p.x * 3 + o, p.y * 3, 0, seed + 4, 3)));
       return c;
     }, new THREE.Vector3(1.15, 0.72, 0.64), -0.25);
@@ -889,7 +911,7 @@ function ventifact(seed: number): THREE.BufferGeometry {
 }
 function mesa(seed: number): THREE.BufferGeometry {
   const r = rng(seed);
-  const cols = [C('#8e3c1e'), C('#c07040'), C('#5a3426'), C('#d49a66'), C('#a4502a')];
+  const cols = [C('#5c2a18'), C('#8a4424'), C('#3a2420'), C('#a0582e'), C('#4a2a1e')];
   const geos: THREE.BufferGeometry[] = [];
   let z = 0;
   const L = 4;
@@ -913,8 +935,9 @@ function mesa(seed: number): THREE.BufferGeometry {
     const base = cols[(l + seed) % cols.length];
     colorize(ng, (p, n) => {
       let c = base.clone().multiplyScalar(0.85 + 0.3 * noise3(p.x * 8, p.y * 8, p.z * 20, seed + l));
-      if (n.z > 0.7) c = lerpC(c, C('#d88a58'), 0.55);
-      return c.multiplyScalar(0.8 + 0.25 * smoothstep(0, 1, p.z));
+      if (n.z > 0.7) c = lerpC(c, C('#e0a070'), 0.7);
+      else c.multiplyScalar(0.75);
+      return c.multiplyScalar(0.8 + 0.3 * smoothstep(0, 1, p.z));
     });
     geos.push(ng);
     z += th + 0.03;
@@ -954,9 +977,9 @@ function cobble(seed: number, s: number, x: number, y: number, round = false): T
   const g = blob(3,
     (p) => 1 + (fbm3(p.x * 1.2 + o, p.y * 1.2, p.z * 1.2, seed, 3) - 0.5) * 0.22,
     (p, n) => {
-      const top = C('#e8f0f6'), side = C('#a4b8cc'), stain = C('#4e3a2a'), frost = C('#ffffff');
+      const top = C('#e4f2ff'), side = C('#8eb2dc'), stain = C('#3e2c20'), frost = C('#ffffff');
       let c = lerpC(side, top, smoothstep(-0.2, 0.8, n.z));
-      c = lerpC(c, C('#c8b89a'), smoothstep(0.62, 0.8, noise3(p.x * 5 + o, p.y * 5, p.z * 5, seed + 2)) * 0.45);
+      c = lerpC(c, C('#a89478'), smoothstep(0.66, 0.82, noise3(p.x * 5 + o, p.y * 5, p.z * 5, seed + 2)) * 0.35);
       if (!round) c = lerpC(c, stain, (1 - smoothstep(-0.05, 0.25, p.z)) * 0.75);
       if (noise3(p.x * 20, p.y * 20, p.z * 20, seed + 3) > 0.78) c = lerpC(c, frost, 0.6);
       return c;
@@ -994,11 +1017,11 @@ function prism(rad: number, h: number, hue: number, seed: number): THREE.BufferG
   const base = hue < 0.5 ? lerpC(VIOLET, ORCHID, hue * 2) : lerpC(VIOLET, CYAN, (hue - 0.5) * 2);
   colorize(g, (p) => {
     const t = p.z / top;
-    let c = lerpC(base.clone().multiplyScalar(0.4), base, smoothstep(0.0, 0.6, t));
+    let c = lerpC(base.clone().multiplyScalar(0.55), base, smoothstep(0.0, 0.5, t));
     c = lerpC(c, C('#ffffff'), smoothstep(0.75, 1.0, t) * 0.55);
     return c.multiplyScalar(0.9 + 0.2 * noise3(p.x * 20, p.y * 20, p.z * 8, seed));
   });
-  setGlow(g, (p) => 0.08 + 0.7 * Math.pow(Math.max(0, p.z / top), 2.2));
+  setGlow(g, (p) => 0.18 + 0.7 * Math.pow(Math.max(0, p.z / top), 2.2));
   return g;
 }
 function crystalSpires(seed: number, n: number, spread = 0.55): THREE.BufferGeometry {
@@ -1007,19 +1030,19 @@ function crystalSpires(seed: number, n: number, spread = 0.55): THREE.BufferGeom
   const hue0 = r();
   for (let i = 0; i < n; i++) {
     const main = i === 0;
-    const h = main ? 1.15 + r() * 0.3 : 0.4 + r() * 0.5;
-    const rad = main ? 0.2 : 0.09 + r() * 0.07;
+    const h = main ? 1.0 + r() * 0.3 : 0.45 + r() * 0.4;
+    const rad = main ? 0.34 : 0.15 + r() * 0.08;
     const g = prism(rad, h, (hue0 + r() * 0.45) % 1, seed + i);
     const a = (i / n) * Math.PI * 2 + r() * 0.5;
-    const tilt = main ? 0.1 : 0.35 + r() * 0.45;
+    const tilt = main ? 0.3 : 0.45 + r() * 0.35;
     g.rotateY(tilt);
     g.rotateZ(a);
-    const d = main ? 0 : spread * (0.5 + r() * 0.5);
+    const d = main ? 0 : spread * (0.45 + r() * 0.25);
     g.translate(Math.cos(a) * d, Math.sin(a) * d, -0.04);
     geos.push(g);
   }
   // dark violet host rock
-  const rock0 = facetRock(seed + 99, { detail: 1, cuts: 5, jag: 0.3, scale: new THREE.Vector3(spread + 0.25, spread + 0.15, 0.3), floor: -0.1 });
+  const rock0 = facetRock(seed + 99, { detail: 1, cuts: 5, jag: 0.3, scale: new THREE.Vector3(spread * 0.55, spread * 0.5, 0.22), floor: -0.1 });
   geos.push(glowPrep(rock0, (p) => lerpC(C('#1e1330'), C('#3e2a5c'), smoothstep(0, 0.3, p.z)), 0));
   return merge(geos.map((g) => { if (!g.getAttribute('aGlow')) setGlow(g, 0); return g; }));
 }
@@ -1028,16 +1051,31 @@ function fungusCap(seed: number, R: number, h: number, pal: number): THREE.Buffe
   const o = r() * 100;
   const stalk = lathe([[R * 0.2, 0], [R * 0.17, h * 0.5], [R * 0.15, h * 0.9], [0.001, h]], 10);
   const top = h + R * 0.42;
-  const cap = lathe([[0.001, top], [R * 0.45, top - R * 0.06], [R * 0.8, top - R * 0.2], [R, top - R * 0.42], [R * 0.92, top - R * 0.47], [R * 0.5, top - R * 0.4], [R * 0.16, h * 0.95]], 26);
-  const [c0, c1, spot] = pal === 0 ? [C('#27c4b0'), C('#0b4a5e'), C('#b4ffe4')] : pal === 1 ? [C('#e44aa4'), C('#5a1848'), C('#ffe0f4')] : [C('#ff8a3a'), C('#7a2a2a'), C('#fff0a0')];
+  // profile runs gills -> rim -> crown so lathe normals face outward
+  const capProf: [number, number][] = [[R * 0.16, h * 0.95], [R * 0.5, top - R * 0.4], [R * 0.92, top - R * 0.47]];
+  for (let i = 0; i <= 14; i++) {
+    const f = 1 - i / 14; // rim -> crown
+    capProf.push([R * Math.pow(Math.sin(f * Math.PI / 2), 0.8) + 0.001, top - R * 0.44 * (1 - Math.cos(f * Math.PI / 2))]);
+  }
+  const cap = lathe(capProf, 48);
+  const [c0, c1, spot] = pal === 0 ? [C('#10b0a0'), C('#063848'), C('#b4ffe0')] : pal === 1 ? [C('#e0309a'), C('#4a0e3a'), C('#ffd0f0')] : [C('#ff6a10'), C('#6a1a10'), C('#fff08a')];
   const gill = C('#2a1a3a');
-  const spotF = (p: THREE.Vector3) => smoothstep(0.7, 0.76, noise3(p.x * 9 / R + o, p.y * 9 / R, p.z * 4, seed));
+  const spots: [number, number, number][] = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 * 1.9 + r(), d = (0.18 + r() * 0.62) * R;
+    spots.push([Math.cos(a) * d, Math.sin(a) * d, (0.1 + r() * 0.07) * R]);
+  }
+  const spotF = (p: THREE.Vector3) => {
+    let m = 0;
+    for (const [x, y, sr] of spots) m = Math.max(m, smoothstep(sr, sr * 0.6, Math.hypot(p.x - x, p.y - y)));
+    return m;
+  };
   const cg = glowPrep(cap, (p, n) => {
     if (n.z < -0.1) return gill;
     const rr = Math.hypot(p.x, p.y) / R;
     const c = lerpC(c0, c1, smoothstep(0.3, 1.0, rr));
     return lerpC(c, spot, spotF(p) * (n.z > 0 ? 1 : 0));
-  }, (p) => spotF(p) * 0.9 + 0.04);
+  }, (p) => spotF(p) * 0.7 + 0.03);
   const sg = glowPrep(stalk, C('#e0d4ee'), 0);
   return merge([sg, cg]);
 }
@@ -1060,18 +1098,18 @@ function fungusPatch(seed: number, n: number): THREE.BufferGeometry {
 function hoverCrystal(seed: number): ObstacleGeo {
   const r = rng(seed);
   const geos: THREE.BufferGeometry[] = [];
-  const core = lathe([[0.001, -1], [0.55, -0.12], [0.55, 0.12], [0.001, 1]], 6).toNonIndexed();
+  const core = lathe([[0.001, -1], [0.78, -0.12], [0.78, 0.12], [0.001, 1]], 6).toNonIndexed();
   core.computeVertexNormals();
   colorize(core, (p) => lerpC(CYAN, VIOLET, smoothstep(-0.8, 0.8, p.z + p.x * 0.3)).multiplyScalar(0.8 + 0.4 * (1 - Math.abs(p.z))));
   setGlow(core, (p) => 0.35 + 0.5 * Math.abs(p.z));
   geos.push(prep(core, undefined)); recolor(geos[0], core); geos[0].setAttribute('aGlow', core.getAttribute('aGlow'));
   for (let k = 0; k < 3; k++) {
-    const s = prism(0.1, 0.25, r(), seed + k);
+    const s = prism(0.13, 0.3, r(), seed + k);
     s.translate(0, 0, -0.2);
     s.rotateX(Math.PI / 2 + 0.5);
     s.rotateZ((k / 3) * Math.PI * 2);
     const a = (k / 3) * Math.PI * 2;
-    s.translate(Math.cos(a) * 0.95, Math.sin(a) * 0.95, (k - 1) * 0.2);
+    s.translate(Math.cos(a) * 1.15, Math.sin(a) * 1.15, (k - 1) * 0.2);
     geos.push(s);
   }
   const glow = new THREE.PlaneGeometry(2.6, 2.6);

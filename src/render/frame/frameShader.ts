@@ -2,21 +2,7 @@
 import * as THREE from 'three';
 import { NOISE_GLSL } from '../glsl/noise';
 import { SEA_GLSL } from '../sand/sandShader';
-import { BIOME_INDEX } from '../biomeVisuals';
-import type { BiomeId } from '../../types';
-import { SHARED_GLSL, NEW_BIOMES_GLSL } from './newWorlds';
-
-const idx = (id: BiomeId, fallback: number) => (BIOME_INDEX as Partial<Record<BiomeId, number>>)[id] ?? fallback;
-/** Compile-time biome ids for the expansion worlds (follow BIOME_INDEX; fall back to BiomeId order). */
-const BIOME_DEFINES = /* glsl */ `
-#define B_PINK ${idx('pinksands', 5)}
-#define B_VAADHOO ${idx('vaadhoo', 6)}
-#define B_DALLOL ${idx('dallol', 7)}
-#define B_LUNA ${idx('luna', 8)}
-#define B_MARS ${idx('mars', 9)}
-#define B_TITAN ${idx('titan', 10)}
-#define B_KEPLER ${idx('kepler', 11)}
-`;
+import { BIOME_DEFINES, SHARED_GLSL, NEW_BIOMES_GLSL } from './newWorlds';
 
 const FRAME_VERT = /* glsl */ `
 varying vec2 vP;

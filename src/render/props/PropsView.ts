@@ -26,6 +26,11 @@ interface Item {
   zBase?: number;
   exitS?: THREE.Vector3;
   exitCaptured?: boolean;
+  motion?: 'roll' | 'log' | 'walk' | 'hover';
+  lift?: number;
+  alignYaw?: number;
+  yaw?: number;
+  spin?: number;
 }
 
 const easeOutBack = (t: number) => {
@@ -37,8 +42,18 @@ const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 // ------------------------------------------------------------------ particles
 const MAXP = 240;
+type BurstSet = 'flake' | 'cube' | 'shard' | 'spark';
+interface BurstPhys {
+  gravity: number; airDrag: number; flutter: number; spin: number;
+  upMin: number; upMax: number; lifeMin: number; lifeMax: number;
+  /** Damping of upward speed while airborne (0 = pure ballistic, e.g. vacuum). */
+  vzDamp: number;
+}
+const PHYS: BurstPhys = { gravity: 9, airDrag: 1.6, flutter: 1.5, spin: 18, upMin: 1.2, upMax: 3.4, lifeMin: 0.9, lifeMax: 1.5, vzDamp: 1.2 };
+
 class Burst {
   readonly mesh: THREE.InstancedMesh;
+  phys: BurstPhys = { ...PHYS };
   private px = new Float32Array(MAXP * 3);
   private pv = new Float32Array(MAXP * 3);
   private rot = new Float32Array(MAXP * 3);
@@ -54,16 +69,10 @@ class Burst {
   private p = new THREE.Vector3();
   private c = new THREE.Color();
 
-  constructor() {
-    // small cupped petal / flake
-    const g = new THREE.CircleGeometry(0.5, 7);
-    g.scale(1, 0.62, 1);
-    const pos = g.getAttribute('position');
-    for (let i = 0; i < pos.count; i++) pos.setZ(i, 0.12 * (pos.getX(i) ** 2 + pos.getY(i) ** 2));
-    g.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide, emissive: new THREE.Color(0x000000) });
+  constructor(g: THREE.BufferGeometry, mat: THREE.Material) {
     this.mesh = new THREE.InstancedMesh(g, mat, MAXP);
     this.mesh.count = 0;
+    this.mesh.visible = false;
     this.mesh.frustumCulled = false;
     this.mesh.castShadow = false;
     this.mesh.userData.noShadow = true;
@@ -72,6 +81,7 @@ class Burst {
   }
 
   emit(x: number, y: number, z: number, cols: THREE.Color[], count: number, speed: number, size: number, glow = 0) {
+    const P = this.phys;
     for (let k = 0; k < count; k++) {
       let i = this.n;
       if (i >= MAXP) {
@@ -83,18 +93,21 @@ class Burst {
       const a = Math.random() * Math.PI * 2;
       const sp = speed * (0.45 + Math.random() * 0.8);
       this.px[i * 3] = x; this.px[i * 3 + 1] = y; this.px[i * 3 + 2] = z;
-      this.pv[i * 3] = Math.cos(a) * sp; this.pv[i * 3 + 1] = Math.sin(a) * sp; this.pv[i * 3 + 2] = 1.2 + Math.random() * 2.2;
-      for (let d = 0; d < 3; d++) { this.rot[i * 3 + d] = Math.random() * 6.28; this.spin[i * 3 + d] = (Math.random() - 0.5) * 18; }
-      this.maxLife[i] = this.life[i] = 0.9 + Math.random() * 0.6;
+      this.pv[i * 3] = Math.cos(a) * sp; this.pv[i * 3 + 1] = Math.sin(a) * sp; this.pv[i * 3 + 2] = P.upMin + Math.random() * (P.upMax - P.upMin);
+      for (let d = 0; d < 3; d++) { this.rot[i * 3 + d] = Math.random() * 6.28; this.spin[i * 3 + d] = (Math.random() - 0.5) * P.spin; }
+      this.maxLife[i] = this.life[i] = P.lifeMin + Math.random() * (P.lifeMax - P.lifeMin);
       this.size[i] = size * (0.6 + Math.random() * 0.7);
       this.c.copy(cols[Math.floor(Math.random() * cols.length)]);
       if (glow > 0) this.c.multiplyScalar(1 + glow);
       this.mesh.setColorAt(i, this.c);
     }
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.mesh.visible = true;
   }
 
   update(dt: number) {
+    if (this.n === 0) { this.mesh.visible = false; return; }
+    const P = this.phys;
     let w = 0;
     for (let i = 0; i < this.n; i++) {
       this.life[i] -= dt;
@@ -112,11 +125,15 @@ class Burst {
       }
       const o = w * 3;
       const ground = this.px[o + 2] <= 0.015;
-      this.pv[o + 2] -= 9 * dt;
-      const drag = ground ? Math.exp(-dt * 10) : Math.exp(-dt * 1.6);
+      this.pv[o + 2] -= P.gravity * dt;
+      const drag = ground ? Math.exp(-dt * 10) : Math.exp(-dt * P.airDrag);
       this.pv[o] *= drag; this.pv[o + 1] *= drag;
       // flutter
-      if (!ground) { this.pv[o] += Math.sin(this.life[w] * 13 + w) * dt * 1.5; this.pv[o + 1] += Math.cos(this.life[w] * 11 + w) * dt * 1.5; this.pv[o + 2] *= Math.exp(-dt * 1.2); }
+      if (!ground) {
+        const f = P.flutter;
+        this.pv[o] += Math.sin(this.life[w] * 13 + w) * dt * f; this.pv[o + 1] += Math.cos(this.life[w] * 11 + w) * dt * f;
+        this.pv[o + 2] *= Math.exp(-dt * P.vzDamp);
+      }
       for (let d = 0; d < 3; d++) this.px[o + d] += this.pv[o + d] * dt;
       if (this.px[o + 2] < 0.012) { this.px[o + 2] = 0.012; this.pv[o + 2] = 0; }
       const spinK = ground ? 0 : 1;
@@ -135,8 +152,94 @@ class Burst {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  clear() { this.n = 0; this.mesh.count = 0; }
+  clear() { this.n = 0; this.mesh.count = 0; this.mesh.visible = false; }
 }
+
+function makeBursts(): Record<BurstSet, Burst> {
+  // small cupped petal / flake
+  const flake = new THREE.CircleGeometry(0.5, 7);
+  flake.scale(1, 0.62, 1);
+  const pos = flake.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, 0.12 * (pos.getX(i) ** 2 + pos.getY(i) ** 2));
+  flake.computeVertexNormals();
+  const lit = () => new THREE.MeshStandardMaterial({ roughness: 0.6, side: THREE.DoubleSide, emissive: new THREE.Color(0x000000) });
+  const cube = new THREE.BoxGeometry(0.62, 0.62, 0.62);
+  const shard = new THREE.OctahedronGeometry(0.5, 0); shard.scale(0.55, 0.55, 1.2);
+  const spark = new THREE.OctahedronGeometry(0.5, 0);
+  const glowMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  return {
+    flake: new Burst(flake, lit()),
+    cube: new Burst(cube, new THREE.MeshStandardMaterial({ roughness: 0.5, flatShading: true })),
+    shard: new Burst(shard, new THREE.MeshPhysicalMaterial({ roughness: 0.15, clearcoat: 1, flatShading: true })),
+    spark: new Burst(spark, glowMat),
+  };
+}
+
+interface Emit { set: BurstSet; cols: THREE.Color[]; count: number; speed: number; size: number; glow?: number }
+interface BurstFx { eat: Emit[]; gold: Emit[]; phys: Partial<Record<BurstSet, Partial<BurstPhys>>> }
+const cl = (...h: string[]) => h.map((x) => new THREE.Color(x));
+const GOLD = cl('#ffd35a', '#fff0b0', '#ffb020');
+const goldFx = (set: BurstSet): Emit[] => [
+  { set, cols: GOLD, count: 20, speed: 2.8, size: set === 'flake' ? 0.1 : 0.06, glow: 1.2 },
+  { set: 'spark', cols: GOLD, count: 12, speed: 2.4, size: 0.05, glow: 2 },
+];
+/** Eat-scatter look per world. Worlds not listed use the classic flake burst. */
+const FX: Partial<Record<BiomeId, BurstFx>> = {
+  pinksands: {
+    eat: [
+      { set: 'flake', cols: cl('#f7a8b4', '#fff2ea', '#ec7a8e'), count: 14, speed: 2.2, size: 0.12 },
+      { set: 'cube', cols: cl('#fff4ec', '#e8909c', '#c84a5a'), count: 12, speed: 1.9, size: 0.05 },
+    ],
+    gold: goldFx('flake'), phys: { cube: { flutter: 0, vzDamp: 0, gravity: 10 } },
+  },
+  vaadhoo: {
+    eat: [
+      { set: 'spark', cols: cl('#6fe0ff', '#c8f4ff', '#2e9cff'), count: 26, speed: 1.8, size: 0.06, glow: 2.5 },
+      { set: 'flake', cols: cl('#f6eee2', '#c6bcd8'), count: 8, speed: 1.8, size: 0.09 },
+    ],
+    gold: goldFx('flake'),
+    phys: { spark: { gravity: 1.2, airDrag: 2.2, flutter: 2.5, upMin: 0.6, upMax: 1.6, lifeMin: 1.2, lifeMax: 2.2, vzDamp: 1.5 } },
+  },
+  dallol: {
+    eat: [
+      { set: 'cube', cols: cl('#ffffff', '#f4f0e0', '#f2e23a'), count: 20, speed: 2.4, size: 0.07 },
+      { set: 'cube', cols: cl('#3ad6b4'), count: 5, speed: 1.6, size: 0.05 },
+    ],
+    gold: goldFx('cube'), phys: { cube: { gravity: 11, airDrag: 0.8, flutter: 0, spin: 12, vzDamp: 0 } },
+  },
+  luna: {
+    eat: [
+      { set: 'cube', cols: cl('#a8a6a0', '#6e6c68', '#8a8884'), count: 14, speed: 1.6, size: 0.05 },
+      { set: 'spark', cols: cl('#bfe6ff', '#e8f8ff', '#7ac0ff'), count: 16, speed: 1.6, size: 0.05, glow: 2 },
+    ],
+    gold: goldFx('cube'),
+    phys: {
+      cube: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 1.2, upMax: 2.4, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 0, spin: 6 },
+      spark: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 1.2, upMax: 2.4, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 0, spin: 6 },
+    },
+  },
+  mars: {
+    eat: [
+      { set: 'flake', cols: cl('#c0602a', '#e08a4a', '#8a3a1a'), count: 14, speed: 2.0, size: 0.1 },
+      { set: 'shard', cols: cl('#f4fbff', '#a9d3ef'), count: 10, speed: 2.2, size: 0.07 },
+    ],
+    gold: goldFx('shard'),
+    phys: { flake: { gravity: 3.7, airDrag: 1.2, flutter: 0.8, lifeMin: 1.2, lifeMax: 1.8 }, shard: { gravity: 3.7, airDrag: 0.6, flutter: 0, vzDamp: 0 } },
+  },
+  titan: {
+    eat: [{ set: 'flake', cols: cl('#f0862e', '#b85a1c', '#ffc070'), count: 22, speed: 1.4, size: 0.11 }],
+    gold: goldFx('flake'),
+    phys: { flake: { gravity: 1.35, airDrag: 3.2, flutter: 2.2, upMin: 0.8, upMax: 1.8, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 1.8, spin: 6 } },
+  },
+  kepler: {
+    eat: [
+      { set: 'spark', cols: cl('#ff5ae8', '#5af0ff', '#c890ff'), count: 18, speed: 2.0, size: 0.06, glow: 2 },
+      { set: 'shard', cols: cl('#b07aff', '#5ae6ff'), count: 10, speed: 2.2, size: 0.07, glow: 0.6 },
+    ],
+    gold: goldFx('shard'),
+    phys: { spark: { gravity: 2, airDrag: 1.5, flutter: 2, lifeMin: 1.2, lifeMax: 2.0 }, shard: { gravity: 7, flutter: 0, vzDamp: 0 } },
+  },
+};
 
 // ------------------------------------------------------------------ dust puffs for rolling hazards
 class Dust {
@@ -180,7 +283,10 @@ class Dust {
 // ------------------------------------------------------------------ view
 const DUST: Record<BiomeId, string> = {
   karesansui: '#e6ddcc', erg: '#e8a868', lagoon: '#c9a585', svartsandur: '#58585c', salar: '#ffffff',
+  pinksands: '#f6cccc', vaadhoo: '#4a6a80', dallol: '#f4ecb0', luna: '#a09e98', mars: '#c87a4a',
+  titan: '#6a4428', kepler: '#c8a0ff',
 };
+const wrapPi = (a: number) => { a = (a + Math.PI) % (Math.PI * 2); if (a < 0) a += Math.PI * 2; return a - Math.PI; };
 
 export class PropsView implements IPropsView {
   readonly object = new THREE.Group();
@@ -190,7 +296,8 @@ export class PropsView implements IPropsView {
   private obstacles = new Map<number, Item>();
   private pickups = new Map<number, Item>();
   private free = new Map<string, Item[]>();
-  private burst = new Burst();
+  private bursts = makeBursts();
+  private fx: BurstFx | null = null;
   private dust = new Dust();
   private hcRing: THREE.RingGeometry;
   private hcMat: THREE.MeshBasicMaterial;
@@ -201,7 +308,8 @@ export class PropsView implements IPropsView {
 
   constructor() {
     this.object.name = 'props';
-    this.object.add(this.burst.mesh, this.dust.group);
+    for (const b of Object.values(this.bursts)) this.object.add(b.mesh);
+    this.object.add(this.dust.group);
     this.hcRing = new THREE.RingGeometry(0.43, 0.5, 48);
     this.hcMat = new THREE.MeshBasicMaterial({ color: 0x3af0ff, toneMapped: false, transparent: true, opacity: 0.95, depthWrite: false });
     this.hcDark = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false });
@@ -213,7 +321,9 @@ export class PropsView implements IPropsView {
     this.biome = id;
     this.clearAll();
     this.free.clear();
-    this.dust.setColor(new THREE.Color(DUST[id]));
+    this.dust.setColor(new THREE.Color(DUST[id] ?? '#cccccc'));
+    this.fx = FX[id] ?? null;
+    for (const k of Object.keys(this.bursts) as BurstSet[]) this.bursts[k].phys = { ...PHYS, ...(this.fx?.phys[k] ?? {}) };
   }
 
   setHighContrast(on: boolean) {
@@ -227,7 +337,7 @@ export class PropsView implements IPropsView {
       m.clear();
     }
     for (const list of this.free.values()) for (const it of list) this.object.remove(it.root);
-    this.burst.clear();
+    for (const b of Object.values(this.bursts)) b.clear();
     this.dust.clear();
   }
 
@@ -271,10 +381,15 @@ export class PropsView implements IPropsView {
     m.castShadow = true; m.receiveShadow = true;
     inner.add(m);
     for (const e of og.extra ?? []) {
-      const x = new THREE.Mesh(e.geo, e.mat); x.castShadow = true; x.receiveShadow = true; inner.add(x);
+      const x = new THREE.Mesh(e.geo, e.mat);
+      if (e.noShadow) noShadow(x); else { x.castShadow = true; x.receiveShadow = true; }
+      inner.add(x);
     }
     root.add(inner);
-    return { key: `o:${seed % 6}:${big ? 1 : 0}:${rolling ? 1 : 0}`, root, inner, id: 0, x: 0, y: 0, seen: true, exit: 'none', exitT: 0, seed, born: 0, rollQ: new THREE.Quaternion(), dustT: 0 };
+    return {
+      key: `o:${seed % 6}:${big ? 1 : 0}:${rolling ? 1 : 0}`, root, inner, id: 0, x: 0, y: 0, seen: true, exit: 'none', exitT: 0, seed, born: 0,
+      rollQ: new THREE.Quaternion(), dustT: 0, motion: og.motion ?? 'roll', lift: og.lift ?? 1, alignYaw: og.alignYaw, yaw: 0, spin: 0,
+    };
   }
 
   private makePickup(kind: PowerupKind): Item {
@@ -302,13 +417,16 @@ export class PropsView implements IPropsView {
       if (e.type === 'eat') {
         eats.push(e);
         const gold = e.kind === 'golden';
-        const cols = gold ? [new THREE.Color('#ffd35a'), new THREE.Color('#fff0b0'), new THREE.Color('#ffb020')] : fm.burst;
-        this.burst.emit(e.x, e.y, 0.15, cols, gold ? 30 : 22, gold ? 2.8 : 2.2, gold ? 0.1 : 0.13, gold ? 1.2 : this.biome === 'svartsandur' ? 1.5 : 0);
+        if (this.fx) {
+          for (const em of gold ? this.fx.gold : this.fx.eat) this.bursts[em.set].emit(e.x, e.y, 0.15, em.cols, em.count, em.speed, em.size, em.glow ?? 0);
+        } else {
+          this.bursts.flake.emit(e.x, e.y, 0.15, gold ? GOLD : fm.burst, gold ? 30 : 22, gold ? 2.8 : 2.2, gold ? 0.1 : 0.13, gold ? 1.2 : this.biome === 'svartsandur' ? 1.5 : 0);
+        }
       } else if (e.type === 'foodExpired') expires.push(e);
       else if (e.type === 'powerup') {
         picks.push(e);
         const c = new THREE.Color(POWERUP_COLOR[e.kind]);
-        this.burst.emit(e.x, e.y, 0.35, [c, c.clone().lerp(new THREE.Color(1, 1, 1), 0.5)], 18, 2.2, 0.07, 1.5);
+        this.bursts.flake.emit(e.x, e.y, 0.35, [c, c.clone().lerp(new THREE.Color(1, 1, 1), 0.5)], 18, 2.2, 0.07, 1.5);
       }
     }
     const near = (list: GameEvent[], x: number, y: number) =>
@@ -351,7 +469,7 @@ export class PropsView implements IPropsView {
       if (it.exit === 'none') {
         it.exit = near(eats, it.x, it.y) ? 'pop' : near(expires, it.x, it.y) ? 'fade' : 'shrink';
         it.exitT = 0;
-        if (it.exit === 'fade') this.burst.emit(it.x, it.y, 0.05, fm.burst, 5, 0.5, 0.07);
+        if (it.exit === 'fade') (this.fx ? this.bursts[this.fx.eat[0].set] : this.bursts.flake).emit(it.x, it.y, 0.05, fm.burst, 5, 0.5, 0.07);
       }
       it.exitT += dt;
       const done = this.animateExit(it);
@@ -374,8 +492,11 @@ export class PropsView implements IPropsView {
         const key = `o:${ob.seed % 6}:${big ? 1 : 0}:${rolling ? 1 : 0}`;
         it = this.take(key, () => this.makeObstacle(ob.seed, big, rolling));
         it.id = ob.id; it.born = t;
-        it.root.rotation.z = rolling ? 0 : ((ob.seed * 0.618) % 1) * Math.PI * 2;
+        const jit = (ob.seed * 0.618) % 1;
+        it.root.rotation.z = rolling ? 0 : it.alignYaw !== undefined ? it.alignYaw + (jit - 0.5) * 0.4 : jit * Math.PI * 2;
         it.rollQ!.identity();
+        it.yaw = Math.atan2(ob.vy, ob.vx); it.spin = 0;
+        it.inner.rotation.set(0, 0, 0); it.inner.position.set(0, 0, 0);
         this.obstacles.set(ob.id, it);
       }
       it.seen = true;
@@ -383,23 +504,7 @@ export class PropsView implements IPropsView {
       const age = t - it.born;
       const sp = easeOutBack(clamp01(age / 0.6));
       if (rolling) {
-        const rad = ob.r * 0.95;
-        const v = Math.hypot(ob.vx, ob.vy);
-        if (v > 0 && dt > 0) {
-          this._v.set(-ob.vy, ob.vx, 0).normalize();
-          this._q.setFromAxisAngle(this._v, (v * dt) / rad);
-          it.rollQ!.premultiply(this._q);
-          it.dustT! -= dt;
-          if (it.dustT! <= 0) {
-            it.dustT = 0.07;
-            this.dust.puff(ob.x - (ob.vx / v) * rad * 0.8, ob.y - (ob.vy / v) * rad * 0.8, -ob.vx * 0.15, -ob.vy * 0.15);
-          }
-        }
-        it.inner.quaternion.copy(it.rollQ!);
-        it.inner.position.set(0, 0, 0);
-        it.root.position.set(ob.x, ob.y, rad * sp);
-        it.root.scale.setScalar(Math.max(0.0001, rad * sp));
-        it.inner.children[0].position.z = 0; // blob is centred for round stones
+        this.moveHazard(it, ob.vx, ob.vy, ob.r * 0.95, sp, dt, t);
       } else {
         // footprint: stay slightly inside the occupied cells
         const sx = hx * 0.94, sy = hy * 0.94;
@@ -450,8 +555,70 @@ export class PropsView implements IPropsView {
       if (this.animateExit(it)) { this.release(it); this.pickups.delete(id); }
     }
 
-    this.burst.update(dt);
+    for (const b of Object.values(this.bursts)) b.update(dt);
     this.dust.update(dt);
+  }
+
+  /** Moving hazards: roll, roll-as-log, walk (faces its heading and bobs) or hover. */
+  private moveHazard(it: Item, vx: number, vy: number, rad: number, sp: number, dt: number, t: number) {
+    const v = Math.hypot(vx, vy);
+    const heading = Math.atan2(vy, vx);
+    const puff = (every: number, back: number, spread = 0.15) => {
+      it.dustT! -= dt;
+      if (it.dustT! <= 0 && v > 0) {
+        it.dustT = every;
+        this.dust.puff(it.x - (vx / v) * rad * back, it.y - (vy / v) * rad * back, -vx * spread, -vy * spread);
+      }
+    };
+    switch (it.motion) {
+      case 'log': {
+        // align the log across the travel direction (either way round), roll about its axis
+        if (v > 0) {
+          let d = wrapPi(heading - it.yaw!);
+          if (d > Math.PI / 2) d -= Math.PI; else if (d < -Math.PI / 2) d += Math.PI;
+          it.yaw! += d * Math.min(1, dt * 10);
+          const sign = Math.cos(it.yaw! - heading) >= 0 ? 1 : -1;
+          it.spin! += (sign * v * dt) / (rad * it.lift!);
+          if (dt > 0) puff(0.06, it.lift!, 0.15);
+        }
+        it.root.rotation.z = it.yaw!;
+        it.inner.rotation.set(0, it.spin!, 0);
+        it.root.position.set(it.x, it.y, rad * it.lift! * sp);
+        it.root.scale.setScalar(Math.max(0.0001, rad * sp));
+        break;
+      }
+      case 'walk': {
+        if (v > 0) it.yaw! += wrapPi(heading - it.yaw!) * Math.min(1, dt * 7);
+        it.spin! += v * dt * 11;
+        it.root.rotation.z = it.yaw!;
+        it.inner.position.z = Math.abs(Math.sin(it.spin!)) * 0.07;
+        it.inner.rotation.set(Math.sin(it.spin!) * 0.07, 0, Math.sin(it.spin! * 0.5) * 0.06);
+        it.root.position.set(it.x, it.y, 0);
+        it.root.scale.setScalar(Math.max(0.0001, rad * 1.15 * sp));
+        if (dt > 0) puff(0.1, 0.9, 0.1);
+        break;
+      }
+      case 'hover': {
+        it.spin! += dt * 1.7;
+        it.inner.rotation.set(Math.sin(t * 1.3 + it.seed) * 0.12, Math.cos(t * 1.1 + it.seed) * 0.12, it.spin!);
+        it.root.rotation.z = 0;
+        it.root.position.set(it.x, it.y, rad * (1.3 + 0.12 * Math.sin(t * 2.3 + it.seed)) * sp);
+        it.root.scale.setScalar(Math.max(0.0001, rad * sp));
+        break;
+      }
+      default: {
+        if (v > 0 && dt > 0) {
+          this._v.set(-vy, vx, 0).normalize();
+          this._q.setFromAxisAngle(this._v, (v * dt) / rad);
+          it.rollQ!.premultiply(this._q);
+          puff(0.07, 0.8);
+        }
+        it.inner.quaternion.copy(it.rollQ!);
+        it.inner.position.set(0, 0, 0);
+        it.root.position.set(it.x, it.y, rad * sp);
+        it.root.scale.setScalar(Math.max(0.0001, rad * sp));
+      }
+    }
   }
 
   private animateSparkles(o: THREE.Object3D, t: number) {

@@ -135,7 +135,7 @@ export class Tube {
         const o2 = (base + j) * 2;
         uv[o2] = j * inv; uv[o2 + 1] = S[q];
         const o4 = (base + j) * 4;
-        info[o4] = S[q]; info[o4 + 1] = this.k[q]; info[o4 + 2] = w; info[o4 + 3] = X;
+        info[o4] = S[q]; info[o4 + 1] = this.k[q]; info[o4 + 2] = j * inv; info[o4 + 3] = w;
       }
     }
     const nv = n * V;

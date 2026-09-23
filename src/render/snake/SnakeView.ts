@@ -1,14 +1,15 @@
 // Snake renderer: procedural scaled tube + head parts, per-skin physical material.
 import * as THREE from 'three';
 import type { ISnakeView } from '../contract';
-import type { CharacterId, RenderFrame, SkinId, SnakeSkinId } from '../../types';
+import type { CharacterId, QualityLevel, RenderFrame, SkinId, SnakeSkinId } from '../../types';
 import { isLegend } from '../../skins/skins';
 import { createCharacter } from '../characters';
 import type { ICharacterView } from '../characters/contract';
 import { SnakeBody, type RingFrame } from './SnakeBody';
 import { SnakeHead } from './SnakeHead';
 import { DeathChain } from './DeathChain';
-import { applySkin, createSnakeMaterial, type SnakeUniforms } from './snakeMaterial';
+import { applySkin, createSnakeMaterial, setGlass, type SnakeUniforms } from './snakeMaterial';
+import type { SkinLook } from './skinLooks';
 
 const WAVE_LEN = 2.6;
 
@@ -26,6 +27,12 @@ export class SnakeView implements ISnakeView {
   private lead = 0;
   private wasAlive = true;
   private r = 0.34;
+  private look: SkinLook | null = null;
+  private quality: QualityLevel = 'high';
+  /** Crystal on low quality: alpha-blended glass instead of transmission. */
+  private glassBlend = false;
+  /** renderer.transmissionResolutionScale while the crystal uses transmission (0 = leave alone). */
+  private transScale = 0;
   /** Debug hook: constant tongue flicks. */
   set debugTongue(v: boolean) { this.head.forceTongue = v; }
   private frameAtBound: (s: number, out: RingFrame) => RingFrame;
@@ -38,6 +45,10 @@ export class SnakeView implements ISnakeView {
     this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = false;
     this.mesh.name = 'snake-body';
+    // crystal: the transmission target is the main cost, so size it by quality (takes effect next frame)
+    this.mesh.onBeforeRender = (r) => {
+      if (this.transScale > 0 && r.transmissionResolutionScale !== this.transScale) r.transmissionResolutionScale = this.transScale;
+    };
     this.object.name = 'snake';
     this.object.add(this.mesh, this.head.group);
     this.frameAtBound = (s, out) => this.body.frameAt(s, this.r, out);
@@ -68,6 +79,30 @@ export class SnakeView implements ISnakeView {
     }
     const L = applySkin(this.mat, this.u, id as SnakeSkinId);
     this.head.setLook(L);
+    this.look = L;
+    this.applyGlass();
+  }
+
+  /**
+   * Quality level (from GameRenderer.applyQuality). Only the crystal skin cares: medium+ uses real
+   * transmission (three renders the opaque scene once more into a transmission target), low uses a
+   * cheap alpha-blended glass. High/ultra add chromatic dispersion.
+   */
+  setQuality(q: QualityLevel) {
+    if (q === this.quality) return;
+    this.quality = q;
+    this.applyGlass();
+  }
+
+  private applyGlass() {
+    const L = this.look;
+    const glass = !!L?.glass;
+    const mode = !glass ? 'none' : this.quality === 'low' ? 'blend' : 'transmission';
+    const disp = this.quality === 'ultra' ? 0.3 : 0;
+    this.glassBlend = setGlass(this.mat, this.u, mode, disp);
+    this.transScale = mode === 'transmission' ? (this.quality === 'medium' ? 0.5 : this.quality === 'high' ? 0.75 : 1) : 0;
+    // hint for the contact-shadow pass (glass casts a lighter shadow)
+    this.mesh.userData.shadowOpacity = L?.shadow ?? 1;
   }
 
   update(f: RenderFrame) {
@@ -112,7 +147,9 @@ export class SnakeView implements ISnakeView {
       px, count, spacing: s.spacing, radius: this.r,
       fwdX: s.dirX, fwdY: s.dirY, bulges: s.bulges,
       waveAmp: this.amp, wavePhase: this.phase, waveLen: WAVE_LEN, headLead: this.lead,
+      headWidth: this.look?.headWidth ?? 0,
     });
+    this.u.uLen.value = Math.max(0.05, this.body.endS - this.body.tipS);
 
     // --- ghost
     let opacity = 1;
@@ -122,15 +159,16 @@ export class SnakeView implements ISnakeView {
     } else {
       this.u.uGhost.value = Math.max(0, (this.u.uGhost.value as number) - dt * 5);
     }
-    const tr = (this.u.uGhost.value as number) > 0.01;
+    const gh = (this.u.uGhost.value as number) > 0.01;
+    const tr = gh || this.glassBlend;
     if (this.mat.transparent !== tr) { this.mat.transparent = tr; this.mat.needsUpdate = true; }
-    this.mat.opacity = tr ? 1 - (1 - opacity) * (this.u.uGhost.value as number) : 1;
+    this.mat.opacity = gh ? 1 - (1 - opacity) * (this.u.uGhost.value as number) : 1;
     this.mat.depthWrite = true;
     this.mesh.visible = count >= 2;
     this.head.group.visible = count >= 2;
 
     if (count >= 2) {
-      this.head.update(this.frameAtBound, this.body.tipS, this.r, f.paused ? 0 : dt, s.alive, s.deathT, s.interest, tr, this.mat.opacity);
+      this.head.update(this.frameAtBound, this.body.tipS, this.r, f.paused ? 0 : dt, s.alive, s.deathT, s.interest, gh, this.mat.opacity);
     }
   }
 

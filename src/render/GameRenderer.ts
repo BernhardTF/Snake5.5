@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { BiomeId, QualityLevel, RenderFrame, SkinId } from '../types';
 import type { IGameRenderer, RenderOptions } from './contract';
 import { LIGHT } from './lighting';
-import { BIOME_VISUALS, lin, type BiomeVisual } from './biomeVisuals';
+import { BIOME_COUNT, BIOME_VISUALS, lin, type BiomeVisual } from './biomeVisuals';
 import { DeformSim } from './sand/DeformSim';
 import { makeSandMaterial, MAX_CENTERS } from './sand/sandShader';
 import { makeFrameMaterial } from './frame/frameShader';
@@ -30,6 +30,16 @@ const PRESETS: Record<QualityLevel, QualityPreset> = {
   medium: { simRes: 512, shadowRes: 200, scale: 0.8, dprCap: 2, post: true, bloom: false, dof: false, grain: false, particles: 0.5, samples: 0 },
   high: { simRes: 768, shadowRes: 256, scale: 1.0, dprCap: 1.5, post: true, bloom: true, dof: false, grain: false, particles: 1.0, samples: 4 },
   ultra: { simRes: 1024, shadowRes: 320, scale: 1.0, dprCap: 2, post: true, bloom: true, dof: true, grain: true, particles: 1.5, samples: 4 },
+};
+
+/** Per-biome sand pattern relief (uPatAmp) and frame-lip height (rim shadow on the sand). */
+const PAT_AMP: Record<BiomeId, number> = {
+  karesansui: 0.055, erg: 0.04, lagoon: 0.05, svartsandur: 0.04, salar: 0.03,
+  pinksands: 0.035, vaadhoo: 0.04, dallol: 0.035, luna: 0.03, mars: 0.035, titan: 0.03, kepler: 0.04,
+};
+const FRAME_H: Record<BiomeId, number> = {
+  karesansui: 0.32, erg: 0.36, lagoon: 0.3, svartsandur: 0.42, salar: 0.14,
+  pinksands: 0.28, vaadhoo: 0.3, dallol: 0.3, luna: 0.34, mars: 0.36, titan: 0.3, kepler: 0.34,
 };
 
 const AURORA = [new THREE.Color(0.1, 0.95, 0.5), new THREE.Color(0.05, 0.75, 0.85), new THREE.Color(0.55, 0.2, 0.95)];
@@ -100,6 +110,7 @@ export class GameRenderer implements IGameRenderer {
 
     const common = {
       uSunDir: LIGHT.sunDir, uSunColor: LIGHT.sunColor, uSkyColor: LIGHT.skyColor, uGroundColor: LIGHT.groundColor,
+      uSun2Dir: LIGHT.sun2Dir, uSun2Color: LIGHT.sun2Color,
       uTime: LIGHT.time,
       uCookie: { value: this.cookie.texture }, uCookieRegion: { value: this.cookie.region },
       uBoard: { value: new THREE.Vector2(this.W, this.H) },
@@ -116,10 +127,12 @@ export class GameRenderer implements IGameRenderer {
       uCenters: { value: this.centers }, uCenterCount: { value: 0 },
       uWind: { value: new THREE.Vector2(1, 0) },
       uAurora: { value: new THREE.Color(0, 0, 0) },
+      uDevils: { value: this.sim.devils },
+      uShadowK: { value: 0.82 },
       uDebug: { value: 0 },
     };
     this.frameU = { ...common, uBorder: { value: FRAME_BORDER } };
-    for (let b = 0; b < 5; b++) {
+    for (let b = 0; b < BIOME_COUNT; b++) {
       this.sandMats.push(makeSandMaterial(b, this.sandU));
       this.frameMats.push(makeFrameMaterial(b, this.frameU));
     }
@@ -165,6 +178,11 @@ export class GameRenderer implements IGameRenderer {
     LIGHT.sunColor.value.setRGB(...v.sun);
     LIGHT.skyColor.value.setRGB(...v.sky);
     LIGHT.groundColor.value.setRGB(...v.ground);
+    if (v.sun2 && v.sun2Dir) {
+      LIGHT.sun2Dir.value.set(...v.sun2Dir).normalize();
+      LIGHT.sun2Color.value.setRGB(...v.sun2);
+    } else LIGHT.sun2Color.value.setRGB(0, 0, 0);
+    this.shadows.softness = v.shadow?.soft ?? 1;
     this.baseSky.copy(LIGHT.skyColor.value);
     const u = this.sandU;
     (u.uColA.value as THREE.Color).copy(lin(v.sandA));
@@ -174,8 +192,9 @@ export class GameRenderer implements IGameRenderer {
     (u.uHorizon.value as THREE.Color).copy(lin(v.env.horizon));
     (u.uWind.value as THREE.Vector2).set(v.sim.windX || 1, v.sim.windY || 0);
     u.uDepth.value = v.depthScale;
-    u.uPatAmp.value = ({ karesansui: 0.055, erg: 0.04, lagoon: 0.05, svartsandur: 0.04, salar: 0.03 } as const)[id];
-    this.frameU.uFrameH.value = ({ karesansui: 0.32, erg: 0.36, lagoon: 0.3, svartsandur: 0.42, salar: 0.14 } as const)[id];
+    u.uPatAmp.value = PAT_AMP[id];
+    u.uShadowK.value = v.shadow?.dark ?? 0.82;
+    this.frameU.uFrameH.value = FRAME_H[id];
     this.sim.setBiome(id);
     this.propsView.setBiome(id);
     this.particles.setBiome(id);
@@ -294,7 +313,7 @@ export class GameRenderer implements IGameRenderer {
     const sm = this.sandMesh.material, fm = this.frameMesh.material;
     const prevTarget = r.getRenderTarget();
     r.setRenderTarget(this.post.target);
-    for (let b = 0; b < 5; b++) {
+    for (let b = 0; b < BIOME_COUNT; b++) {
       this.sandMesh.material = this.sandMats[b];
       this.frameMesh.material = this.frameMats[b];
       r.compile(this.scene, this.camera);

@@ -109,6 +109,7 @@ export class AudioCore implements MusicHost, SfxHost {
     this.seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     this.synth = new Synth(ctx, this.seed);
     this.synth.sync = !!opts.offline;
+    this.synth.onMiss = (k, m) => this.queueKs(k, m);
     this.musicVoices = new VoiceTracker(ctx, 72);
     this.sfxVoices = new VoiceTracker(ctx, 24);
     const g = (v = 1) => { const n = ctx.createGain(); n.gain.value = v; return n; };
@@ -196,19 +197,36 @@ export class AudioCore implements MusicHost, SfxHost {
   }
 
   private prewarm(b: BiomeId) {
-    if (this.prepared.has(b)) return;
-    this.prepared.add(b);
-    this.queueGen(this.slither.crackleTask(b));
-    this.queue(() => { this.slither.init(); return true; });
+    if (!this.prepared.has(b)) {
+      this.prepared.add(b);
+      this.queueGen(this.slither.crackleTask(b));
+      this.queue(() => { this.slither.init(); return true; });
+    }
     const key = BIOME_KEYS[b];
     const list: [PluckKind, number][] = [];
     const inScale = (m: number) => key.scale.includes((((m - key.root) % 12) + 12) % 12);
     for (const [kind, lo, hi] of PREWARM[b]) for (let m = lo; m <= hi; m++) if (inScale(m)) list.push([kind, m]);
     const lead = key.lead;
-    if (isPluck(lead)) for (let d = 0; d < 12; d++) list.push([lead, key.sfxRoot + degToSemi(key.scale, d)]);
+    // eat/combo notes (0..11) plus golden-arpeggio headroom, capped where KS notes get very short
+    if (isPluck(lead)) for (let d = 0; d < 20; d++) { const m = key.sfxRoot + degToSemi(key.scale, d); if (m <= 100) list.push([lead, m]); }
     // SFX lead notes first, then the score's range
     list.reverse();
-    for (const [k, m] of list) this.queueGen(this.synth.ksTask(k, m));
+    // (the KS cache is an LRU: on a revisit only evicted notes are rendered again)
+    for (const [k, m] of list) if (!this.synth.hasKs(k, m)) this.queueKs(k, m);
+  }
+
+  private ksPending = new Set<string>();
+  /** Idle-render one KS note (deduplicated). Realtime cache misses land here instead of blocking. */
+  private queueKs(k: PluckKind, m: number) {
+    const key = k + ':' + Math.round(m);
+    if (this.ksPending.has(key)) return;
+    this.ksPending.add(key);
+    const g = this.synth.ksTask(k, m);
+    this.queue(() => {
+      const done = g.next().done === true;
+      if (done) this.ksPending.delete(key);
+      return done;
+    });
   }
 
   // ---------------------------------------------------------------- reverb
@@ -235,7 +253,7 @@ export class AudioCore implements MusicHost, SfxHost {
       buf.copyToChannel(data[1] as Float32Array<ArrayBuffer>, 1);
       const conv = this.ctx.createConvolver();
       conv.normalize = true;
-      conv.buffer = buf;
+      conv.buffer = buf; // one-time FFT setup (~6-19 ms), isolated in its own job slice
       const gain = this.ctx.createGain();
       gain.gain.value = 0;
       this.revIn.connect(conv).connect(gain).connect(this.revOut);
@@ -378,6 +396,7 @@ export class AudioCore implements MusicHost, SfxHost {
   /** Scheduler tick: schedule notes up to now + lookahead. */
   tick(lookahead = 0.16) {
     const now = this.now();
+    this.slither.poll();
     for (const r of this.runtimes) r.rt.pump(now, now + lookahead);
     this.legends.tick(now, now + lookahead);
     for (let i = this.runtimes.length - 1; i >= 0; i--) {
