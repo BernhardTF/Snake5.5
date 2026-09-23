@@ -11,7 +11,7 @@ import { NOISE, patch } from './common/mats';
 import { cone, ellipsoid, limb, merge, mirrorY, paint, paintGrad } from './common/geo';
 import { clamp, commit, damp, hash1, instanced, lerp, Rng, setColor, smooth, writeTRS } from './common/util';
 
-const MAXR = 1800;
+const MAXR = 1400;
 const MAXSPIKE = 2600;
 const NMANE = 52;
 const NWH = 16;       // whisker nodes

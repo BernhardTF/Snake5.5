@@ -10,7 +10,7 @@ import { newSample } from './common/track';
 import { NOISE, patch } from './common/mats';
 import { clamp, damp, lerp, noShadow, Rng, smooth } from './common/util';
 
-const MAXR = 1800;
+const MAXR = 1400;
 const MAXB = 28;
 const NP = 12;
 const FV = 8;
@@ -18,7 +18,7 @@ const CYAN = new THREE.Color('#5ff4ff');
 
 export class EelView extends LegendBase {
   readonly id = 'eel' as const;
-  private tube = new Tube({ radial: 20, maxRings: MAXR, flank: 0.92, belly: 0.72 });
+  private tube = new Tube({ radial: 18, maxRings: MAXR, flank: 0.92, belly: 0.72 });
   private body: THREE.Mesh;
   private bodyMat: THREE.MeshPhysicalMaterial;
   private u = { uFlash: { value: 0 }, uPulse: { value: -10 }, uDead: { value: 0 }, uCrack: { value: 0 }, uT: { value: 0 } };

@@ -96,7 +96,7 @@ export class CentipedeView extends LegendBase {
     // leg: hip at origin extending +Y (left side); coxa, femur up to the knee, tibia down to the claw
     const legG = limb(
       [[0, 0, 0], [0.01, 0.085, 0.05], [0.03, 0.175, 0.095], [-0.03, 0.265, 0.04], [-0.065, 0.315, 0.0]],
-      [0.045, 0.04, 0.036, 0.027, 0.01], 7,
+      [0.036, 0.031, 0.028, 0.021, 0.008], 7,
     );
     paintGradMulti(legG);
     this.legsL = instanced(legG, legMat, MAXSEG, true);
@@ -115,12 +115,12 @@ export class CentipedeView extends LegendBase {
       ellipsoid(0.016, 0.014, 0.013, 0.045, -0.135, 0.165), ellipsoid(0.013, 0.012, 0.011, 0.01, -0.16, 0.155),
     ]), eyeMat);
     // forcipules: stout curved fangs from under the head, tips black
-    const fangG = limb([[0, 0, 0], [0.1, 0.04, 0.01], [0.2, 0.02, 0.02], [0.25, -0.06, 0.02]], [0.05, 0.042, 0.026, 0.005], 8);
-    paintGrad(fangG, 1, -0.06, 0.03, '#0c0302', '#6e1e0a');
+    const fangG = limb([[0, 0, 0], [0.11, 0.035, 0.012], [0.21, 0.0, 0.02], [0.25, -0.08, 0.022], [0.235, -0.115, 0.02]], [0.058, 0.048, 0.032, 0.016, 0.004], 8);
+    paintGrad(fangG, 1, -0.1, 0.02, '#080201', '#8a2610');
     this.fangL = new THREE.Mesh(fangG, fangMat);
-    this.fangL.position.set(0.06, 0.1, 0.05);
+    this.fangL.position.set(0.04, 0.13, 0.05);
     this.fangR = new THREE.Mesh(mirrorY(fangG), fangMat);
-    this.fangR.position.set(0.06, -0.1, 0.05);
+    this.fangR.position.set(0.04, -0.13, 0.05);
     for (const m of [hp, eyes, this.fangL, this.fangR]) { m.castShadow = true; m.receiveShadow = true; this.head.add(m); }
     this.head.matrixAutoUpdate = false;
     for (let i = 0; i < this.legSeed.length; i++) this.legSeed[i] = Math.random();
@@ -206,7 +206,7 @@ export class CentipedeView extends LegendBase {
         let u = (this.cycles - (k * lag) / TWO_PI + side * 0.5) % 1;
         if (u < 0) u += 1;
         let th: number, lift: number;
-        const amp = 0.42;
+        const amp = 0.55;
         if (u < 0.58) { th = amp * (1 - (2 * u) / 0.58); lift = 0; }
         else { const q = (u - 0.58) / 0.42; th = amp * (-1 + 2 * (q * q * (3 - 2 * q))); lift = Math.sin(Math.PI * q) * 0.42; }
         if (!alive) {

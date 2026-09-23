@@ -3,7 +3,7 @@
 //          and a moving hazard patrolling back and forth.
 //   Row 2: the six single-cell obstacle variants (seed % 6 = 0..5) on a faint cell grid.
 //   Row 3: five 2x2 obstacle variants.
-//   params: biome=<id>  zoom=<k> (1 = whole sheet)  cx,cy = zoom centre  bloom=0  hc=1  every=<s>
+//   params: biome=<id>  zoom=<k> (1 = whole sheet)  cx,cy = zoom centre  bloom=0  hc=1  every=<s>  ff=<frames>
 // Lighting mirrors GameRenderer: BIOME_VISUALS sun/sky/ground + the PMREM sky environment.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -141,9 +141,13 @@ export function runPropsPreview(params: URLSearchParams) {
       events, intensity: 0, shake: 0, paused: false,
     };
   };
+  // ff=<frames>: pre-simulate at 30 fps (e.g. to catch an eat burst mid-flight in a screenshot)
+  const ff = +(params.get('ff') ?? 0);
+  for (let i = 0; i < ff; i++) pv.update(frame(1 / 30));
   const loop = () => {
     const now = performance.now();
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    // generous cap: headless SwiftShader runs at a few fps and the sheet should still animate
+    const dt = Math.min(0.2, (now - last) / 1000); last = now;
     pv.update(frame(dt));
     composer.render();
     requestAnimationFrame(loop);
