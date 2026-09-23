@@ -352,9 +352,7 @@ export class DragonView extends LegendBase {
       let w = this.widthAt(s, L, sc);
       const b = this.bulgeAt(f, s, 0.42 * sc);
       w *= 1 + 0.4 * Math.min(1.2, b);
-      const gd = tr.gapDist(s);
-      const capL = 0.26 * sc;
-      if (gd < capL) { const t = 1 - gd / capL; w *= Math.sqrt(Math.max(0, 1 - t * t)); }
+      w *= tr.gapCap(s, 0.26 * sc);
       // tail end: round off into the flame tuft
       const te = L - s;
       if (te < 0.08 * sc) w *= Math.sqrt(Math.max(0, te / (0.08 * sc)));
@@ -451,7 +449,7 @@ export class DragonView extends LegendBase {
     this.updateFlames(f, L, sc, alive, td, dead);
 
     // ---------------- cloud wisps trailing along the body
-    const cloudRate = alive ? (2.5 + spd * 0.9) * Math.min(3, 0.5 + L / (8 * sc)) : (this.justDied ? 0 : 0);
+    const cloudRate = alive ? (1.6 + spd * 0.6) * Math.min(3, 0.5 + L / (8 * sc)) : 0;
     if (this.justDied) for (let i = 0; i < 18; i++) this.spawnCloud(L, sc, 1.6);
     this.cloudAcc += dt * cloudRate;
     while (this.cloudAcc > 1) { this.cloudAcc -= 1; this.spawnCloud(L, sc, 1); }
@@ -471,7 +469,7 @@ export class DragonView extends LegendBase {
     const lat = sg * (w + r.range(0.0, 0.18) * sc);
     const x = this.smp.x - this.smp.ty * lat, y = this.smp.y + this.smp.tx * lat;
     const vx = -this.smp.ty * sg * 0.18 - this.smp.tx * 0.12, vy = this.smp.tx * sg * 0.18 - this.smp.ty * 0.12;
-    this.clouds.spawn(x, y, 0.03 * sc, vx * k, vy * k, 0, r.range(1.8, 2.8), 0.35 * sc, r.range(0.85, 1.25) * sc * k, 1, 0.98, 0.94, 0.95, r.next() * 6.28, (r.next() - 0.5) * 0.4, 1.5);
+    this.clouds.spawn(x, y, 0.03 * sc, vx * k, vy * k, 0, r.range(1.8, 2.8), 0.35 * sc, r.range(0.85, 1.25) * sc * k, 1, 0.98, 0.94, 0.62, r.next() * 6.28, (r.next() - 0.5) * 0.4, 1.5);
   }
 
   private updateWhiskers(hx: number, hy: number, hyaw: number, sc: number, alive: boolean, dt: number) {

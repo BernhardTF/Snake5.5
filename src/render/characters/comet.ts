@@ -52,7 +52,7 @@ void main() {
   I *= 1.0 + uFlare * 0.8 * exp(-s * 0.7);
   I *= 1.0 - uDead;
   vec3 rgb = col * I + coreCol * Ic * (1.0 - uDead) * (1.0 + uFlare) + vec3(0.9, 1.0, 1.0) * knot * 0.6;
-  float a = clamp((dust * mix(0.8, 0.95, uDay) + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.92);
+  float a = clamp((pow(dust, 1.6) * mix(0.8, 0.95, uDay) + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.92);
   gl_FragColor = vec4(rgb * uFade, a * uFade);
 }
 `;
@@ -187,8 +187,7 @@ export class CometView extends LegendBase {
       w *= 0.9 + 0.1 * Math.sin(this.t * 13 + sc2 * 3.1) + 0.06 * Math.sin(this.t * 31 - sc2 * 7.3);
       w *= 1 + 0.35 * this.bulgeAt(f, sc2, 0.4 * sc);
       w *= wob;
-      const gd = tr.gapDist(sc2);
-      if (gd < 0.3 * sc) w *= gd / (0.3 * sc);
+      w *= tr.gapCap(sc2, 0.3 * sc);
       const nx = -o.ty, ny = o.tx;
       for (let j = 0; j < AC; j++) {
         const v = (j / (AC - 1)) * 2 - 1;

@@ -55,7 +55,7 @@ export class EelView extends LegendBase {
     this.smoothLen = 0.22;
     const u = this.u;
     this.bodyMat = patch(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, roughness: 0.42, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.16,
+      color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.22,
       emissive: 0xffffff, emissiveIntensity: 1,
     }), {
       uniforms: u,
@@ -65,7 +65,7 @@ export class EelView extends LegendBase {
       color: /* glsl */ `
         float s = vInfo.x;
         float d = 1.0 - abs(vInfo.z - 0.5) * 2.0;    // 1 = spine, 0 = belly
-        vec3 back = vec3(0.028, 0.042, 0.022), flank = vec3(0.10, 0.12, 0.055), belly = vec3(0.72, 0.52, 0.24);
+        vec3 back = vec3(0.045, 0.06, 0.018), flank = vec3(0.14, 0.15, 0.05), belly = vec3(0.8, 0.55, 0.22);
         vec3 c = mix(belly, flank, smoothstep(0.18, 0.42, d));
         c = mix(c, back, smoothstep(0.5, 0.82, d));
         // soft darker mottling along the back
@@ -203,9 +203,7 @@ export class EelView extends LegendBase {
       let w = this.widthAt(s, s0, L, sc);
       const b = this.bulgeAt(f, s, 0.42 * sc);
       w *= 1 + 0.42 * Math.min(1.2, b);
-      const gd = tr.gapDist(s);
-      const capL = 0.28 * sc;
-      if (gd < capL) { const t = 1 - gd / capL; w *= Math.sqrt(Math.max(0, 1 - t * t)); }
+      w *= tr.gapCap(s, 0.28 * sc);
       const d = s - s0;
       const tailT = clamp((s - Math.max(1.2 * sc, (L - s0) * 0.45 + s0)) / Math.max(0.1, L - (L - s0) * 0.45 - s0), 0, 1);
       const hr = lerp(0.72, 0.9, smooth(0.05 * sc, 0.7 * sc, d)) * (1 + 0.35 * tailT);
@@ -260,7 +258,7 @@ export class EelView extends LegendBase {
       const sx = -ty, sy = tx;
       const cx = tube.x[q] + sx * tube.off[q], cy = tube.y[q] + sy * tube.off[q];
       // skirt ramps in behind the head, runs to the tail tip
-      const env = smooth(sStart, sStart + 0.9 * sc, s) * (1 - smooth(L - 0.12 * sc, L, s));
+      const env = smooth(sStart, sStart + 0.9 * sc, s) * (1 - smooth(L - 0.12 * sc, L, s)) * this.track.gapCap(s, 0.3 * sc);
       const zr = tube.zc[q] * 0.5;
       for (let sd = 0; sd < 2; sd++) {
         const sg = sd === 0 ? 1 : -1;
@@ -269,7 +267,7 @@ export class EelView extends LegendBase {
         const ext = (0.1 + 0.025 * Math.cos(ph * 0.5 + sd)) * sc * env;
         for (let k = 0; k < 4; k++) {
           const a = k / 3;
-          const lat = sg * (w * 0.72 + (w * 0.28 + ext) * a);
+          const lat = sg * (w * 0.72 + (w * 0.28 + ext) * a) * (env > 0 ? 1 : 0);
           const z = lerp(zr, 0.035 * sc + rip * 0.045 * sc * env, a * a) + a * (1 - a) * 0.02 * sc;
           const o = (m * FV + sd * 4 + k) * 3;
           P[o] = cx + sx * lat; P[o + 1] = cy + sy * lat; P[o + 2] = z;

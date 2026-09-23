@@ -71,7 +71,7 @@ export class CentipedeView extends LegendBase {
   constructor() {
     super();
     this.object.name = 'legend-centipede';
-    const plateMat = chitinMaterial('#eda243', '#b5621a', '#2a0f04', this.uDead);
+    const plateMat = chitinMaterial('#ffbf55', '#d27a22', '#3a1406', this.uDead);
     const headMat = chitinMaterial('#7a2410', '#4a1308', '#180602', this.uDead);
     const memMat = new THREE.MeshStandardMaterial({ color: '#3a2413', roughness: 0.7 });
     const legMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.3 });

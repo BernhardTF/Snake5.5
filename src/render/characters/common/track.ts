@@ -138,6 +138,19 @@ export class PathTrack {
     return d;
   }
 
+  /**
+   * Rounded end-cap factor near wrap cuts: 0 inside the jump segment (so tube rings collapse to a
+   * point and never bridge the board), easing to 1 over `capLen`.
+   */
+  gapCap(s: number, capLen: number): number {
+    if (this.nCuts === 0) return 1;
+    const g = this.gapDist(s) - this.sp * 0.5 - 0.005;
+    if (g <= 0) return 0;
+    if (g >= capLen) return 1;
+    const t = 1 - g / capLen;
+    return Math.sqrt(Math.max(0, 1 - t * t));
+  }
+
   /** True when [s0, s1] straddles a wrap cut. */
   crossesGap(s0: number, s1: number): boolean {
     for (let c = 0; c < this.nCuts; c++) { const q = this.cuts[c]; if (q > s0 && q < s1) return true; }

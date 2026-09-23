@@ -321,7 +321,7 @@ export class TrainView extends LegendBase {
         this.puffAcc -= 1;
         const g = 0.38 + 0.25 * r.next();
         this.smoke.spawn(stackX, stackY, stackZ, -cyaw * spd * 0.1 + r.range(-0.15, 0.15), -syaw * spd * 0.1 + r.range(-0.15, 0.15), 0.6,
-          r.range(1.4, 2.2), 0.16 * sc, r.range(0.75, 1.05) * sc, g, g, g * 1.04, 0.72, r.next() * 6.28, r.range(-0.8, 0.8));
+          r.range(1.3, 2.0), 0.15 * sc, r.range(0.65, 0.9) * sc, g, g, g * 1.04, 0.55, r.next() * 6.28, r.range(-0.8, 0.8));
       }
     }
     if (this.eats) {
