@@ -299,7 +299,7 @@ export class DragonView extends LegendBase {
     }
     this.wGeo.setIndex(widx);
     this.wGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
-    const whiskerMat = new THREE.MeshPhysicalMaterial({ color: '#f2c24a', metalness: 0.7, roughness: 0.28, side: THREE.DoubleSide, emissive: '#3a2200' });
+    const whiskerMat = new THREE.MeshPhysicalMaterial({ color: '#e8a830', metalness: 0.45, roughness: 0.35, side: THREE.DoubleSide, emissive: '#1a0e00' });
     const whiskers = new THREE.Mesh(this.wGeo, whiskerMat);
     whiskers.frustumCulled = false; whiskers.castShadow = true;
 
