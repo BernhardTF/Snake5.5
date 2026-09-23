@@ -171,11 +171,11 @@ void main() {
 #elif BIOME == B_PINK
   // sea-grape branches leaning over the top-left corner, a smaller bush at the bottom-right:
   // leaves in loose rosettes at the branch tips, so light gets through between them
-  vec2 anchor = vec2(-1.5, H + 1.6);
+  vec2 anchor = vec2(-1.0, H + 1.0);
   for (int i = 0; i < 6; i++) {
     float fi = float(i);
-    float ang = mix(-1.35, -0.05, (fi + hash12(vec2(fi, 3.3)) * 0.6) / 6.0);
-    float len = mix(4.0, 7.0, hash12(vec2(fi, 4.4)));
+    float ang = mix(-1.4, -0.1, (fi + hash12(vec2(fi, 3.3)) * 0.6) / 6.0);
+    float len = mix(4.5, 8.5, hash12(vec2(fi, 4.4)));
     vec2 dir = vec2(cos(ang), sin(ang));
     vec2 tip = anchor + dir * len;
     nearL = max(nearL, 1.0 - smoothstep(0.04, 0.08, sdSeg(p, anchor, tip)));

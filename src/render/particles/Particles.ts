@@ -136,7 +136,7 @@ export class Particles {
   private burstCols: THREE.Color[] = [];
   private sandCol = new THREE.Color();
   private dustCol = new THREE.Color();
-  private devilCol = lin('#e8b489');
+  private devilCol = lin('#c68a5e');
   private devil: DustDevilPos = { x: 0, y: 0, r: 1 };
   private birdT = 4;
   private fogT = 0;
@@ -300,9 +300,9 @@ export class Particles {
             const hx = Math.sin(sd * 12.9898) * 43758.5453, hy = Math.sin(sd * 78.233) * 43758.5453;
             x = (hx - Math.floor(hx)) * W + (R() - 0.5) * 0.3; y = (hy - Math.floor(hy)) * H + (R() - 0.5) * 0.3;
           } else { x = R() * W; y = R() * H; }
-          c.setRGB(0.96, 0.97, 0.95);
+          c.setRGB(1, 1, 1);
           this.spawn(x, y, 0.05, 0.12 + (R() - 0.5) * 0.1, 0.05 + (R() - 0.5) * 0.1, 0.35 + R() * 0.3, 2.6 + R() * 1.8,
-            0.26 + R() * 0.18, K_DUST, c, 0.12 + R() * 0.08, 0, -0.05, 0.4, 0.55);
+            0.4 + R() * 0.3, K_DUST, c, 0.26 + R() * 0.1, 0, -0.05, 0.4, 0.7);
           this.tag(B_STEAM, R() * 6.28, 0);
           break;
         }
@@ -449,12 +449,12 @@ export class Particles {
       case 'dallol':
       case 'mars': {
         // crystal shards (kepler: glowing, dallol: salt, mars: water ice)
-        const add = b === 'kepler' ? 1 : 0;
+        // solid (not additive) so they read on bright sand; kepler's are emissive-bright
+        const glow = b === 'kepler' ? 1.8 : 1;
         for (let i = 0; i < k + 2; i++) {
           const a = R() * 6.283, sp = 0.8 + R() * 1.6;
-          c.copy(cols[i % cols.length]);
-          if (add) c.multiplyScalar(2.6);
-          this.spawn(x, y, 0.3, Math.cos(a) * sp, Math.sin(a) * sp, 1.5 + R() * 1.8, 1.1 + R() * 0.7, 0.13 + R() * 0.08, K_SHARD, c, 1, add,
+          c.copy(cols[i % cols.length]).multiplyScalar(glow);
+          this.spawn(x, y, 0.3, Math.cos(a) * sp, Math.sin(a) * sp, 1.5 + R() * 1.8, 1.1 + R() * 0.7, 0.2 + R() * 0.12, K_SHARD, c, 1, 0,
             b === 'mars' ? 3.7 : 6, 0.6);
           this.rotV[this.alive - 1] = (R() - 0.5) * 30;
         }
@@ -539,8 +539,8 @@ export class Particles {
           this.spawn(x, y, 0.05, Math.cos(a) * sp, Math.sin(a) * sp, 0.05, 2 + R() * 1.5, 0.07, K_SPARK, c, 1, 1, 0, 1.2);
           this.tag(B_BLINK, R() * 6.28, 4 + R() * 4);
         } else if (b === 'kepler') {
-          c.copy(this.burstCols[i % this.burstCols.length]).multiplyScalar(2.2);
-          this.spawn(x, y, 0.2, Math.cos(a) * sp * 2, Math.sin(a) * sp * 2, 1 + R(), 1.2 + R() * 0.6, 0.12, K_SHARD, c, 1, 1, 6, 0.6);
+          c.copy(this.burstCols[i % this.burstCols.length]).multiplyScalar(1.8);
+          this.spawn(x, y, 0.2, Math.cos(a) * sp * 2, Math.sin(a) * sp * 2, 1 + R(), 1.2 + R() * 0.6, 0.16, K_SHARD, c, 1, 0, 6, 0.6);
           this.rotV[this.alive - 1] = (R() - 0.5) * 24;
         }
       }

@@ -104,10 +104,10 @@ function tongueGeometry() {
 function lashGeometry() {
   const spikes = [
     // [forward offset, outward offset, length, tilt out, rake forward]
-    [0.24, 0.0, 0.5, 1.1, 0.7],
-    [0.08, 0.04, 0.72, 1.25, 0.3],
-    [-0.08, 0.05, 0.66, 1.3, -0.1],
-    [-0.24, 0.02, 0.46, 1.15, -0.45],
+    [0.24, 0.0, 0.52, 0.85, 0.55],
+    [0.08, 0.05, 0.74, 1.0, 0.2],
+    [-0.08, 0.06, 0.7, 1.05, -0.12],
+    [-0.23, 0.03, 0.48, 0.95, -0.45],
   ];
   const pos: number[] = [], nor: number[] = [], idx: number[] = [];
   const cone = new THREE.ConeGeometry(1, 1, 5, 1);
@@ -117,12 +117,12 @@ function lashGeometry() {
   let base = 0;
   for (const [fy, ox, len, out, rake] of spikes) {
     // spike axis: up, splayed outward and raked forward/back
-    ax.set(out, rake, 0.75).normalize();
+    ax.set(out, rake, 1.0).normalize();
     bx.set(0, 1, 0).cross(ax).normalize();
     cx.crossVectors(ax, bx);
     m.makeBasis(bx, ax, cx);
     // flattened like a scale: wide along forward, thin across
-    m.scale(v.set(0.11, len, 0.06));
+    m.scale(v.set(0.17, len, 0.09));
     m.setPosition(ox, fy, 0);
     nm.getNormalMatrix(m);
     const p = cone.getAttribute('position'), n = cone.getAttribute('normal');
@@ -143,8 +143,17 @@ function lashGeometry() {
 }
 
 const _m = new THREE.Matrix4();
+const _c = new THREE.Color();
+const GHOST_TINT = new THREE.Color(0.45, 0.65, 0.9);
 const _s = new THREE.Vector3();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+
+function tintPart(mat: THREE.MeshStandardMaterial, base: THREE.Color, dead: number, ghost: boolean) {
+  const l = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
+  _c.setRGB(l * 0.85, l * 0.85, l * 0.85);
+  mat.color.copy(base).lerp(_c, dead);
+  if (ghost) mat.color.lerp(_c.copy(GHOST_TINT).multiplyScalar(0.45 + 0.55 * l), 0.55);
+}
 
 export class SnakeHead {
   readonly group = new THREE.Group();
@@ -159,6 +168,8 @@ export class SnakeHead {
   private lashL: THREE.Mesh;
   private lashR: THREE.Mesh;
   private lashMat: THREE.MeshStandardMaterial;
+  private hornBase = new THREE.Color();
+  private lashBase = new THREE.Color();
   private eyeMat: THREE.MeshPhysicalMaterial;
   private fr: RingFrame = { x: 0, y: 0, z: 0, tx: 1, ty: 0, w: 0, h: 0, zc: 0 };
   private fr2: RingFrame = { x: 0, y: 0, z: 0, tx: 1, ty: 0, w: 0, h: 0, zc: 0 };
@@ -214,10 +225,12 @@ export class SnakeHead {
     this.tongueMat.emissive.setStyle(L.index === 7 ? '#ff4a10' : tg > 0 ? L.tongue : '#000000');
     this.tongueMat.emissiveIntensity = tg;
     this.hornMat.color.setStyle(L.nasalHorns ? (L.extra ?? L.alt) : L.alt);
+    this.hornBase.copy(this.hornMat.color);
     this.horns = L.horns;
     this.nasal = !!L.nasalHorns && !L.horns;
     this.lashes = !!L.lashes;
     this.lashMat.color.setStyle(L.alt);
+    this.lashBase.copy(this.lashMat.color);
     this.eyeScale = L.eyeScale ?? 1;
   }
 
@@ -242,6 +255,12 @@ export class SnakeHead {
       closed = Math.min(1, deathT / 0.35);
     }
     this.eyeU.uClosed.value = closed;
+    // horns / lashes follow the body's death desaturation and ghost tint
+    if (this.horns || this.nasal || this.lashes) {
+      const dead = alive ? 0 : Math.min(1, deathT / 1.2) * 0.7;
+      tintPart(this.hornMat, this.hornBase, dead, ghost);
+      tintPart(this.lashMat, this.lashBase, dead, ghost);
+    }
     const eyeMat = this.eyeMat;
     eyeMat.transparent = ghost; eyeMat.opacity = ghost ? Math.min(1, opacity + 0.25) : 1;
 
@@ -300,7 +319,7 @@ export class SnakeHead {
         _x.set(ox, oy, 0); _y.set(fx, fy, 0); _z.set(0, 0, 1);
         _m.makeBasis(_x, _y, _z);
         _m.scale(_s.set(r, r, r));
-        _m.setPosition(fe.x + ox * fe.w * 0.7, fe.y + oy * fe.w * 0.7, fe.zc + fe.h * 0.7 + er * 0.3);
+        _m.setPosition(fe.x + ox * fe.w * 0.58, fe.y + oy * fe.w * 0.58, fe.zc + fe.h * 0.84 + er * 0.2);
         lm.matrix.copy(_m);
         lm.matrixWorldNeedsUpdate = true;
       }

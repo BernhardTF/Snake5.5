@@ -43,7 +43,7 @@ export interface SkinLook {
   iridX?: number;
   /** three.js iridescence thickness range in nm (default [220, 620]). */
   iridRange?: [number, number];
-  /** Glass body: transmission on medium+ quality, alpha-blended glass on low. */
+  /** Glass body: transmission on high/ultra quality, alpha-blended glass on low/medium. */
   glass?: boolean;
   /** Hint for the contact-shadow pass: occluder strength 0..1 (default 1). */
   shadow?: number;
@@ -122,7 +122,7 @@ export const SKIN_LOOKS: Record<SnakeSkinId, SkinLook> = {
   },
   eyelash: {
     // banana-gold morph with dark freckles and a crown of scaled lashes
-    index: 12, base: '#f2c01a', pattern: '#5a3208', belly: '#fff0a0', alt: '#f5cf3a',
+    index: 12, base: '#f4b80c', pattern: '#5a3208', belly: '#fff0a0', alt: '#ffd23a',
     rim: '#ffd84a', rimStrength: 0.65, roughness: 0.48, clearcoat: 0.4, keel: 0.8,
     iridescence: 0, sheen: 0.2, emissive: 0, iris: '#c8b030', pupil: 1, eyeGlow: 0, horns: false, tongue: '#2a2418',
     extra: '#b8300e', lashes: true, eyeScale: 1.08,
@@ -138,7 +138,7 @@ export const SKIN_LOOKS: Record<SnakeSkinId, SkinLook> = {
     // a window into space: drifting violet/pink/cyan clouds and twinkling stars
     index: 14, base: '#07041a', pattern: '#7a4dff', belly: '#0d0724', alt: '#ff5fd2',
     rim: '#8a6aff', rimStrength: 0.7, roughness: 0.2, clearcoat: 1.0, keel: 0.0,
-    iridescence: 0, sheen: 0.15, emissive: 1, iris: '#e6d8ff', pupil: 1, eyeGlow: 1.3, horns: false, tongue: '#b58cff',
+    iridescence: 0, sheen: 0.15, emissive: 1, iris: '#b48cff', pupil: 1, eyeGlow: 1.3, horns: false, tongue: '#b58cff',
     extra: '#3ad0ff', tongueGlow: 0.9,
   },
   crystal: {

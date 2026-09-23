@@ -297,6 +297,7 @@ export class PropsView implements IPropsView {
   private pickups = new Map<number, Item>();
   private free = new Map<string, Item[]>();
   private bursts = makeBursts();
+  private burstList = Object.values(this.bursts);
   private fx: BurstFx | null = null;
   private dust = new Dust();
   private hcRing: THREE.RingGeometry;
@@ -555,21 +556,22 @@ export class PropsView implements IPropsView {
       if (this.animateExit(it)) { this.release(it); this.pickups.delete(id); }
     }
 
-    for (const b of Object.values(this.bursts)) b.update(dt);
+    for (const b of this.burstList) b.update(dt);
     this.dust.update(dt);
+  }
+
+  private puff(it: Item, vx: number, vy: number, v: number, rad: number, dt: number, every: number, back: number, spread: number) {
+    it.dustT! -= dt;
+    if (it.dustT! <= 0 && v > 0) {
+      it.dustT = every;
+      this.dust.puff(it.x - (vx / v) * rad * back, it.y - (vy / v) * rad * back, -vx * spread, -vy * spread);
+    }
   }
 
   /** Moving hazards: roll, roll-as-log, walk (faces its heading and bobs) or hover. */
   private moveHazard(it: Item, vx: number, vy: number, rad: number, sp: number, dt: number, t: number) {
     const v = Math.hypot(vx, vy);
     const heading = Math.atan2(vy, vx);
-    const puff = (every: number, back: number, spread = 0.15) => {
-      it.dustT! -= dt;
-      if (it.dustT! <= 0 && v > 0) {
-        it.dustT = every;
-        this.dust.puff(it.x - (vx / v) * rad * back, it.y - (vy / v) * rad * back, -vx * spread, -vy * spread);
-      }
-    };
     switch (it.motion) {
       case 'log': {
         // align the log across the travel direction (either way round), roll about its axis
@@ -579,7 +581,7 @@ export class PropsView implements IPropsView {
           it.yaw! += d * Math.min(1, dt * 10);
           const sign = Math.cos(it.yaw! - heading) >= 0 ? 1 : -1;
           it.spin! += (sign * v * dt) / (rad * it.lift!);
-          if (dt > 0) puff(0.06, it.lift!, 0.15);
+          if (dt > 0) this.puff(it, vx, vy, v, rad, dt, 0.06, it.lift!, 0.15);
         }
         it.root.rotation.z = it.yaw!;
         it.inner.rotation.set(0, it.spin!, 0);
@@ -595,7 +597,7 @@ export class PropsView implements IPropsView {
         it.inner.rotation.set(Math.sin(it.spin!) * 0.07, 0, Math.sin(it.spin! * 0.5) * 0.06);
         it.root.position.set(it.x, it.y, 0);
         it.root.scale.setScalar(Math.max(0.0001, rad * 1.15 * sp));
-        if (dt > 0) puff(0.1, 0.9, 0.1);
+        if (dt > 0) this.puff(it, vx, vy, v, rad, dt, 0.1, 0.9, 0.1);
         break;
       }
       case 'hover': {
@@ -611,7 +613,7 @@ export class PropsView implements IPropsView {
           this._v.set(-vy, vx, 0).normalize();
           this._q.setFromAxisAngle(this._v, (v * dt) / rad);
           it.rollQ!.premultiply(this._q);
-          puff(0.07, 0.8);
+          this.puff(it, vx, vy, v, rad, dt, 0.07, 0.8, 0.15);
         }
         it.inner.quaternion.copy(it.rollQ!);
         it.inner.position.set(0, 0, 0);

@@ -31,7 +31,7 @@ const BELLY = 0.62;
 const HX = [0.42, 1.0, 1.75, 2.35, 2.85, 3.35, 4.2, 6.0];
 const HW = [0.56, 0.8, 1.06, 1.22, 1.1, 0.88, 0.88, 1.0];
 /** Very broad, triangular viper head (gaboon): straight flanks out to wide jaw corners, thin neck. */
-const HW_BROAD = [0.64, 0.84, 1.12, 1.36, 1.5, 0.98, 0.8, 1.0];
+const HW_BROAD = [0.66, 0.88, 1.2, 1.46, 1.6, 1.0, 0.76, 1.0];
 function profileFrom(W: number[], x: number): number {
   if (x <= 0) return 0;
   if (x < HX[0]) { const t = 1 - x / HX[0]; return W[0] * Math.sqrt(Math.max(0, 1 - t * t)); }

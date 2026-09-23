@@ -18,7 +18,7 @@ uniform float uTime, uDead, uGhost, uR;
 uniform vec3 uSunDir, uSunCol;
 uniform vec3 uCExtra;
 uniform float uLen, uIridX, uGlassA;
-uniform vec3 uSun2Dir, uSun2Col;
+uniform vec3 uSun2Dir, uSun2Col, uSkyCol;
 varying vec3 vWP;     // world position (world-stable effects: nebula, caustics)
 varying vec3 vWN;     // world geometric normal
 varying vec3 vTanV;
@@ -330,14 +330,14 @@ void snakeSurface() {
   } else if (uSkin == 8) { // gaboon viper: geometric hourglasses, rectangles and flank triangles
     float n = sfbm(vec2(lat * 4.0, s * 3.0));
     col = uCBase * (0.84 + 0.3 * n) * (0.93 + 0.14 * h1 * det);
-    float t = (s - headLen * 1.3) / 0.64;
+    float t = (s - headLen * 1.3) / 0.78;
     float fy = fract(t) - 0.5;          // 0 = centre of a pale dorsal rectangle
     float fy2 = fract(t + 0.5) - 0.5;   // 0 = waist of a dark hourglass
     float wob = (n - 0.5) * 0.06;
     // dark hourglass: narrow waist on the spine, bulbs spreading down both flanks
-    float dH = max(abs(fy2) - (0.06 + 0.62 * alat), alat - 0.46) + wob;
+    float dH = max(abs(fy2) - (0.07 + 0.72 * alat), alat - 0.46) + wob;
     // buff rectangle on the spine between hourglasses
-    float dR = max(alat - 0.12, abs(fy) - 0.29) + wob * 0.6;
+    float dR = max(alat - 0.11 - 0.03 * (1.0 - abs(fy) * 2.5), abs(fy) - 0.31) + wob * 0.6;
     // dark flank triangles pointing up, under each rectangle
     float tri = (alat - 0.44) / 0.3;
     float dT = max(abs(fy) - 0.44 * tri, max(-tri * 0.25, alat - 0.8)) + wob;
@@ -347,16 +347,18 @@ void snakeSurface() {
     // hourglass: very dark rim, purplish-brown heart
     col = mix(col, mix(dark, dark * vec3(1.9, 1.5, 1.7), aaStep(0.0, -(dH + 0.1)) * 0.55), inH);
     vec3 buff = uCAlt * (0.9 + 0.16 * n);
-    float stripe = 1.0 - aaStep(0.03, alat);
-    float dots = 1.0 - aaStep(1.0, length(vec2(lat / 0.035, (abs(fy) - 0.15) / 0.05)));
-    col = mix(col, mix(mix(buff, uCBase * 0.9, stripe * 0.6), dark * 1.3, dots * 0.8), inR);
+    // rectangle: buff rim, tan-brown heart with a faint dark centre line
+    float heartR = aaStep(0.0, -(dR + 0.045));
+    vec3 rc = mix(buff, uCBase * 0.95, heartR * 0.75);
+    rc = mix(rc, dark * 1.5, (1.0 - aaStep(0.012, alat)) * heartR * 0.6);
+    col = mix(col, rc, inR);
     col = mix(col, mix(dark, uCBase * 0.72, aaStep(0.0, -(dT + 0.08)) * 0.8), inT);
     col = mix(col, uCExtra * (0.9 + 0.1 * h1), pale * 0.8);
     col = mix(col, uCBelly * (0.9 + 0.15 * n), bellyT);
     col = mix(col, uCPat * 1.4, bm * step(h2, 0.1) * 0.5 * det);
     // head: pale buff with a thin dark centre line and a dark triangle behind each eye
     float hmk = 1.0 - aaStep(headLen * 0.97, sTip);
-    vec3 headC = mix(uCAlt, uCExtra, 0.3) * (0.92 + 0.12 * h1 * det) * (0.94 + 0.12 * n);
+    vec3 headC = mix(uCAlt, uCBase, 0.3) * (0.92 + 0.12 * h1 * det) * (0.94 + 0.12 * n);
     col = mix(col, headC, hmk);
     float midL = (1.0 - aaStep(0.012 + 0.008 * sTip / headLen, alat)) * aaStep(headLen * 0.12, sTip);
     float eyeS = uR * 1.45;
@@ -382,8 +384,8 @@ void snakeSurface() {
     emit = blue * (sk * 0.5 + halo * (1.0 - stripe) * (1.0 - red) * 0.06) * uEmitK + redC * red * uEmitK * 0.2;
     bk = 0.34;
   } else if (uSkin == 10) { // paradise flying snake
-    float edge = smoothstep(0.58, 0.86, sc.e) * (sc.q.y > -0.35 ? 1.0 : 0.55);
-    float ek = mix(0.3, edge, det);
+    float edge = smoothstep(0.6, 0.88, sc.e) * (sc.q.y > -0.35 ? 1.0 : 0.55);
+    float ek = mix(0.22, edge, det);
     float bn = sfbm(vec2(lat * 3.0, s * 2.0));
     float band = smoothstep(0.45, 0.85, 0.5 + 0.5 * sin(s * 3.4 + 0.6) + (bn - 0.5) * 0.7);
     float gk = ek * mix(1.0, 0.3, band * (1.0 - smoothstep(0.3, 0.65, alat)));
@@ -416,7 +418,7 @@ void snakeSurface() {
     col = mix(col, uCAlt, (1.0 - smoothstep(0.0, 0.45, alat)) * 0.4 * n);
     float bw = smoothstep(0.72, 0.84, alat);
     col = mix(col, uCBelly * (0.92 + 0.1 * h2), bw);
-    sFilm = h1 * 0.1 + s * 0.07 + n * 0.6;
+    sFilm = h1 * 0.28 + s * 0.02 + n * 0.5 + sfbm(vec2(lat * 5.0, s * 3.5)) * 0.45;
     irid = 1.0 - bw * 0.7;
     bk = 0.5;
   } else if (uSkin == 12) { // eyelash viper, golden morph
@@ -427,7 +429,7 @@ void snakeSurface() {
     float fk = 0.02 + 0.1 * smoothstep(0.5, 0.8, n2);
     float frk = step(h2, fk) * (1.0 - smoothstep(0.2, 0.42, sc.e));
     vec3 fc = mix(uCPat, uCExtra, step(h1, 0.3));
-    col = mix(col, fc, frk * det * 0.95);
+    col = mix(col, fc, frk * det * 0.95 * (1.0 - hm * 0.8));
     // freckle clusters that still read from gameplay distance
     float fpat = smoothstep(0.74, 0.86, svn(vec2(lat * 10.0, s * 7.5) + 3.0)) * smoothstep(0.35, 0.7, n2);
     col = mix(col, mix(col, uCPat, 0.55), fpat * (1.0 - det * 0.6));
@@ -478,13 +480,13 @@ void snakeSurface() {
     col = mix(uCBase, uCPat, 0.35 * h1 * det + 0.15 * bellyT);
     col = mix(col, uCBelly, bellyT * 0.5);
     // flat facets: every scale is a flat, randomly tilted facet
-    vec2 tilt = (vec2(h1, h2) - 0.5) * 2.4;
+    vec2 tilt = (vec2(h1, h2) - 0.5) * 1.3;
     sGrad = mix(sGrad * 0.35, tilt + sGrad * 0.2, det * (1.0 - bm * 0.6));
     sThick = clamp(W, 0.25, 1.3) * (0.75 + 0.5 * h2);
     sFilm = h1 * 0.6 + s * 0.05;
     vec3 Vw = isOrthographic ? normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2])) : normalize(cameraPosition - vWP);
     float ndv0 = clamp(dot(normalize(vWN), Vw), 0.0, 1.0);
-    sAlpha = mix(1.0, mix(0.3, 0.95, pow(1.0 - ndv0, 1.6)), uGlassA);
+    sAlpha = mix(1.0, mix(0.22, 0.9, pow(1.0 - ndv0, 1.5)), uGlassA);
     // thick glass at grazing angles refracts the darker surroundings: dark cool edge band
     col *= mix(vec3(1.0), vec3(0.42, 0.55, 0.68), smoothstep(0.3, 0.85, 1.0 - ndv0) * (1.0 - uGlassA * 0.5));
     rough = uRough + border * det * 0.2;
@@ -559,6 +561,7 @@ export function createSnakeMaterial() {
     uGlassA: { value: 0 },
     uSunDir: LIGHT.sunDir,
     uSunCol: LIGHT.sunColor,
+    uSkyCol: LIGHT.skyColor,
     uSun2Dir: L2.sun2Dir ?? { value: new THREE.Vector3(0, 0, 0) },
     uSun2Col: L2.sun2Color ?? { value: new THREE.Color(0, 0, 0) },
   };
@@ -597,7 +600,7 @@ vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_COMMON + GLSL_SURF)
-      .replace('#include <map_fragment>', 'snakeSurface();\ndiffuseColor.rgb = sAlb;\ndiffuseColor.a *= sAlpha;')
+      .replace('#include <map_fragment>', 'snakeSurface();\n// blend glass: clear glass has almost no diffuse, the body is mostly transmission (dst * (1 - a))\ndiffuseColor.rgb = sAlb * mix(1.0, sAlpha * 0.35, uGlassA);\ndiffuseColor.a *= sAlpha;')
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = sRough;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = sMetal;')
       .replace('#include <normal_fragment_maps>', `
@@ -633,8 +636,9 @@ vWN = normalize(mat3(modelMatrix) * objectNormal);`);
       film *= film;
       vec3 lit = uSunCol * (pow(nh1, 6.0) * 0.8 + pow(nh1, 60.0) * 2.5) * nl1
                + uSun2Col * (pow(nh2, 6.0) * 0.8 + pow(nh2, 60.0) * 2.5) * nl2;
-      float sky = pow(1.0 - ndv2, 1.5) * 0.35 + 0.08;
-      totalEmissiveRadiance += film * (lit * 0.55 + sky * 0.25) * uIridX * dk;
+      // sky reflection: follows the ambient sky so the skin never glows in the dark
+      float sky = pow(1.0 - ndv2, 1.5) * 0.35 + 0.06;
+      totalEmissiveRadiance += film * (lit * 0.42 + uSkyCol * sky * 0.3) * uIridX * dk;
     }
     if (uSkin == 15) {
       // crystal: fresnel rim, facet glints, internal sparkle and drifting caustics
@@ -659,7 +663,10 @@ vWN = normalize(mat3(modelMatrix) * objectNormal);`);
 #ifdef USE_IRIDESCENCE
   material.iridescence *= sIridk;
 #endif`)
-      .replace('#include <transmission_fragment>', transmissionChunk);
+      .replace('#include <transmission_fragment>', transmissionChunk)
+      // blend glass (additive highlights): keep reflections from washing the body out
+      .replace('#include <opaque_fragment>', `outgoingLight = mix(outgoingLight, totalDiffuse + (outgoingLight - totalDiffuse) * 0.5, uGlassA);
+#include <opaque_fragment>`);
   };
   mat.customProgramCacheKey = () => 'serpent-skin-v2';
   return { mat, u };
@@ -699,5 +706,14 @@ export function setGlass(mat: THREE.MeshPhysicalMaterial, u: SnakeUniforms, mode
   mat.dispersion = mode === 'transmission' ? dispersion : 0;
   mat.ior = mode === 'none' ? 1.52 : 1.5;
   u.uGlassA.value = mode === 'blend' ? 1 : 0;
+  // blend glass: diffuse is pre-scaled by alpha in the shader, highlights stay additive
+  // (src * 1 + dst * (1 - a)), so reflections and sparkles are not dimmed by the transparency
+  if (mode === 'blend') {
+    mat.blending = THREE.CustomBlending;
+    mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor;
+    mat.blendSrcAlpha = THREE.OneFactor; mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+  } else {
+    mat.blending = THREE.NormalBlending;
+  }
   return mode === 'blend';
 }

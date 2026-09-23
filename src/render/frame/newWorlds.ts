@@ -76,14 +76,14 @@ vec3 starfield(vec2 p, float fw, float amt, float milky) {
   float band = exp(-sq(acr / 6.5)) * milky;
   float neb = fbm3(p * 0.11 + 3.0);
   float lanes = smoothstep(0.5, 0.72, fbm3(vec2(dot(p, bd) * 0.12, acr * 0.35) + 7.0));
-  vec3 col = vec3(0.014, 0.013, 0.018) * band * (0.3 + neb) * (1.0 - 0.75 * lanes);
+  vec3 col = vec3(0.02, 0.019, 0.026) * band * (0.3 + neb) * (1.0 - 0.75 * lanes);
   for (int k = 0; k < 3; k++) {
     float fk = float(k);
     float sc = 1.1 - fk * 0.35;
     vec2 g = p / sc + fk * 17.3;
     vec2 id = floor(g);
     vec3 h = hash32(id);
-    float dens = k == 2 ? 0.12 + 0.6 * band : 0.3;
+    float dens = k == 2 ? 0.08 + 0.5 * band : (k == 0 ? 0.1 : 0.16);
     if (h.z < dens) {
       vec2 sp = 0.2 + 0.6 * h.xy;
       float r = length(fract(g) - sp) * sc / fw;
@@ -159,14 +159,14 @@ Surf railSurf(float along, float across, bool vert) {
 Surf outerSurf(vec2 p) {
   // boardwalk decking, sun-silvered, a few planks still wearing pastel paint; pink sand in the gaps
   Surf s;
-  float pw = 0.62;
+  float pw = 0.92;
   float row = floor(p.y / pw), fy = fract(p.y / pw);
-  float bl = 4.2;
+  float bl = 6.3;
   float gx = p.x / bl + hash12(vec2(row, 3.0));
   float seg = floor(gx), gf = fract(gx);
   vec3 wood = silverWood(p.x, fy * pw, row * 7.1);
   float hh = hash12(vec2(seg, row));
-  if (hh < 0.3) {
+  if (hh < 0.16) {
     vec3 pc = mix(junk(hash12(vec2(seg, row + 50.0))), vec3(0.9, 0.88, 0.84), 0.35);
     float w = smoothstep(0.56, 0.64, fbm(p * vec2(1.4, 5.0) + hh * 9.0));
     wood = mix(pc, wood, w);
@@ -216,15 +216,15 @@ Surf railSurf(float along, float across, bool vert) {
     s.nrm = vec2(0.0, (kf < 0.1 ? 0.6 : (kf > 0.9 ? -0.6 : 0.0)));
   } else if (a < 0.82) {
     float t = (a - 0.5) / 0.32 * 2.0 - 1.0;
-    s.alb = hardwood(along * 0.7, across, 20.0 + sd) * 1.15;
+    s.alb = hardwood(along * 0.7, across, 20.0 + sd) * 1.5;
     s.alb *= mix(0.35, 1.0, smoothstep(1.0, 0.8, abs(t)));
     s.nrm = vec2(0.0, t * 1.5);
-    s.spec = 0.9; s.gloss = 110.0;
+    s.spec = 1.6; s.gloss = 80.0;
   } else {
     float t = (a - 0.82) / 0.18 * 2.0 - 1.0;
     float tw = fract(along * 5.5 + t * 0.7);
     float strand = sin(tw * PI);
-    s.alb = srgb(vec3(0.46, 0.33, 0.19)) * (0.45 + 0.6 * strand) * (0.8 + 0.3 * vnoise(vec2(along * 40.0, t * 4.0)));
+    s.alb = srgb(vec3(0.62, 0.46, 0.28)) * (0.45 + 0.6 * strand) * (0.8 + 0.3 * vnoise(vec2(along * 40.0, t * 4.0)));
     s.alb *= mix(0.3, 1.0, smoothstep(1.0, 0.7, abs(t)));
     s.nrm = vec2(cos(tw * 6.2831) * 0.5, t * 1.3);
     s.spec = 0.08; s.gloss = 12.0;
@@ -296,8 +296,8 @@ Surf railSurf(float along, float across, bool vert) {
   float h = hash12(vec2(id, vert ? 7.0 : 3.0));
   float layer = across * 7.0 + fbm3(vec2(along * 0.6, across * 2.0) + id * 2.0) * 1.6 + h * 5.0;
   float band = 0.5 + 0.5 * sin(layer * PI);
-  vec3 salt = mix(srgb(vec3(0.86, 0.84, 0.78)), srgb(vec3(0.64, 0.6, 0.53)), band * 0.55);
-  salt = mix(salt, srgb(vec3(0.78, 0.7, 0.54)), smoothstep(0.6, 0.9, h) * 0.5);
+  vec3 salt = mix(srgb(vec3(0.74, 0.72, 0.67)), srgb(vec3(0.5, 0.46, 0.4)), band * 0.7);
+  salt = mix(salt, srgb(vec3(0.66, 0.57, 0.42)), smoothstep(0.55, 0.9, h) * 0.55);
   salt *= 0.88 + 0.2 * vnoise(vec2(along, across) * 30.0);
   float adz = sin((along + across * 0.6) * 38.0 + fbm3(vec2(along, across) * 3.0) * 4.0);
   s.alb = salt * mix(0.35, 1.0, bev) * (0.94 + 0.06 * adz);
@@ -324,12 +324,12 @@ Surf outerSurf(vec2 p) {
   vec2 rel;
   vec3 c = cell2(p * 0.9, 0.9, rel);
   float ridge = 1.0 - smoothstep(0.0, 0.14, c.y - c.x);
-  vec3 salt = srgb(vec3(0.88, 0.86, 0.78)) * (0.85 + 0.2 * fbm3(p * 2.5));
-  float sul = smoothstep(0.6, 0.8, fbm3(p * 0.35 + 11.0));
-  salt = mix(salt, srgb(vec3(0.86, 0.8, 0.22)), sul * 0.6);
+  vec3 salt = srgb(vec3(0.74, 0.72, 0.66)) * (0.8 + 0.25 * fbm3(p * 2.5));
+  float sul = smoothstep(0.55, 0.78, fbm3(p * 0.35 + 11.0));
+  salt = mix(salt, srgb(vec3(0.8, 0.72, 0.16)), sul * 0.7);
   float och = smoothstep(0.66, 0.85, fbm3(p * 0.5 + 23.0));
   salt = mix(salt, srgb(vec3(0.74, 0.42, 0.13)), och * 0.45);
-  s.alb = salt * (0.9 + 0.14 * c.z) * mix(1.0, 1.1, ridge) * mix(0.8, 1.0, smoothstep(0.0, 0.5, c.x));
+  s.alb = salt * (0.88 + 0.16 * c.z) * mix(1.0, 1.18, ridge) * mix(0.72, 1.0, smoothstep(0.0, 0.5, c.x));
   s.nrm = -normalize(rel + 1e-4) * ridge * 0.7 + gnoised(p * 5.0).yz * 0.05;
   s.spec = 0.3; s.gloss = 40.0; s.emit = vec3(0.0); s.h = 0.0;
   return s;
@@ -376,8 +376,8 @@ vec3 earthDisc(vec2 p, vec3 es, float fw, vec3 L, out float cover) {
   float fres = pow(1.0 - n.z, 2.5);
   c = mix(c, vec3(0.25, 0.5, 1.2) * max(ndl + 0.2, 0.0), fres * 0.6);
   c += vec3(0.25, 0.08, 0.02) * exp(-sq(ndl / 0.06)) * 0.35 * (1.0 - cloud * 0.5);
-  float city = land * (1.0 - ice) * smoothstep(0.6, 0.85, vnoise(uv * 24.0)) * smoothstep(0.56, 0.62, cont);
-  c += vec3(1.0, 0.55, 0.2) * city * (1.0 - day) * 0.45 * (1.0 - cloud);
+  float city = land * (1.0 - ice) * smoothstep(0.72, 0.9, vnoise(uv * 70.0)) * smoothstep(0.58, 0.64, cont) * smoothstep(0.4, 0.7, vnoise(uv * 9.0));
+  c += vec3(1.0, 0.6, 0.25) * city * (1.0 - day) * 0.3 * (1.0 - cloud);
   return c * cover + glow;
 }
 vec3 shadeAll(vec2 p, float d, vec2 q, bool vert, vec2 outward, float along, float vis, float fw) {
@@ -447,33 +447,34 @@ vec3 shadeAll(vec2 p, float d, vec2 q, bool vert, vec2 outward, float along, flo
 #elif BIOME == B_MARS
 #define CUSTOM_OUTER
 Surf railSurf(float along, float across, bool vert) {
-  // layered mudstone rim rock (Jezero delta strata), dust in the hollows
+  // stratified mudstone ledge (Jezero delta beds): three beds along the rail, each broken into
+  // blocks by joints, stepping down toward the board; rust dust settles on the treads
   Surf s;
   float b = uBorder;
   float a = across / b;
-  float wob = fbm3(vec2(along * 0.22, across * 0.8) + (vert ? 4.0 : 0.0));
-  float layer = a * 3.2 + wob * 1.6;
+  float sd = vert ? 13.0 : 0.0;
+  float wob = fbm3(vec2(along * 0.3 + sd, across * 0.7)) - 0.5;
+  float layer = a * 3.0 + wob * 1.1 + 0.25 * sin(along * 0.9 + sd);
   float li = floor(layer), lf = fract(layer);
-  float tone = hash12(vec2(li, 3.0));
-  vec3 rock = mix(srgb(vec3(0.42, 0.24, 0.15)), srgb(vec3(0.66, 0.47, 0.32)), tone);
-  rock = mix(rock, srgb(vec3(0.34, 0.27, 0.27)), step(0.72, tone) * 0.7);
-  // thin laminae inside each bed
-  rock *= 0.9 + 0.12 * sin((layer * 7.0 + wob * 3.0) * PI);
-  vec2 rel;
-  vec3 cr = cell2(vec2(along * 1.2, across * 2.4), 1.0, rel);
-  float crack = 1.0 - smoothstep(0.0, 0.07, cr.y - cr.x);
-  rock *= 0.8 + 0.3 * fbm3(vec2(along, across) * 6.0);
-  rock *= 1.0 - 0.5 * crack;
-  // ledge step at each stratum boundary
-  float ledge = smoothstep(0.8, 1.0, lf);
-  rock *= mix(1.0, 0.4, ledge);
-  rock *= mix(1.15, 1.0, smoothstep(0.0, 0.12, lf));   // sunlit lip of the next bed
-  // rust dust settled on the flats
-  float dust = smoothstep(0.35, 0.8, fbm3(vec2(along, across) * 1.7 + 9.0)) * (1.0 - ledge);
-  rock = mix(rock, srgb(vec3(0.66, 0.36, 0.19)), dust * 0.6);
+  float ja = (along + (lf - 0.5) * (hash12(vec2(li, 4.0 + sd)) - 0.5) * 1.2) / (0.8 + 0.7 * hash12(vec2(li, 2.0 + sd)))
+           + hash12(vec2(li, 9.0 + sd)) * 3.0 + wob * 1.4 + 0.3 * vnoise(vec2(along, across) * 4.0);
+  float bi = floor(ja), bf = fract(ja);
+  vec3 h = hash32(vec2(bi, li + sd));
+  float tone = h.x;
+  vec3 rock = mix(srgb(vec3(0.46, 0.28, 0.19)), srgb(vec3(0.6, 0.42, 0.3)), tone);
+  rock = mix(rock, srgb(vec3(0.37, 0.29, 0.28)), step(0.8, h.y) * 0.6);
+  rock *= 0.9 + 0.1 * sin((lf * 6.0 + wob) * PI);               // laminae within the bed
+  rock *= 0.8 + 0.3 * fbm3(vec2(along, across) * 7.0 + h.z * 10.0);
+  float jd = min(bf, 1.0 - bf);
+  float joint = 1.0 - smoothstep(0.0, 0.05, jd);
+  float riser = smoothstep(0.78, 0.98, lf);                       // step down to the next bed
+  float dust = smoothstep(0.35, 0.8, fbm3(vec2(along, across) * 1.6 + 9.0)) * (1.0 - riser);
+  rock = mix(rock, srgb(vec3(0.62, 0.36, 0.2)), dust * 0.5);
+  rock *= mix(1.0, 0.45, riser) * mix(1.0, 0.62, joint);
   s.alb = rock;
-  s.nrm = vec2(gnoised(vec2(along, across) * 5.0).y * 0.25, -ledge * 1.4 + gnoised(vec2(along, across) * 5.0).z * 0.25);
-  s.spec = 0.08; s.gloss = 15.0; s.emit = vec3(0.0); s.h = 0.0;
+  s.nrm = vec2((h.z - 0.5) * 0.3 + (bf < 0.5 ? 1.0 : -1.0) * joint * 0.6, (h.y - 0.5) * 0.25 - riser * 1.6)
+        + gnoised(vec2(along, across) * 6.0).yz * 0.06;
+  s.spec = 0.02; s.gloss = 8.0; s.emit = vec3(0.0); s.h = 0.0;
   return s;
 }
 vec3 shadeOuter(vec2 p, float d, float vis, float fw) {
@@ -544,16 +545,16 @@ Surf railSurf(float along, float across, bool vert) {
   Surf s;
   vec2 lp = vec2(along, across);
   vec2 rel;
-  vec3 c = cell2(lp * 3.0 + (vert ? 11.0 : 0.0), 0.85, rel);
+  vec3 c = cell2(lp * 2.1 + (vert ? 11.0 : 0.0), 1.0, rel);
   float edge = c.y - c.x;
-  float rad = 0.62;
+  float rad = 0.55 + 0.2 * c.z;
   float dome = sqrt(max(0.0, 1.0 - sq(c.x / rad)));
-  float gap = smoothstep(0.02, 0.12, edge);
-  vec3 ice = srgb(vec3(0.66, 0.66, 0.64)) * (0.72 + 0.35 * c.z) * (0.9 + 0.15 * vnoise(lp * 25.0));
-  ice = mix(ice, srgb(vec3(0.5, 0.36, 0.24)), smoothstep(0.5, 0.0, dome) * 0.5);  // tholin dust on the flanks
-  vec3 sand = srgb(vec3(0.14, 0.09, 0.06));
+  float gap = smoothstep(0.05, 0.2, edge) * step(c.x, rad);
+  vec3 ice = mix(srgb(vec3(0.82, 0.84, 0.86)), srgb(vec3(0.62, 0.66, 0.72)), c.z) * (0.9 + 0.15 * vnoise(lp * 25.0));
+  ice = mix(ice, srgb(vec3(0.5, 0.34, 0.2)), smoothstep(0.55, 0.0, dome) * 0.55);  // tholin grime on the flanks
+  vec3 sand = srgb(vec3(0.12, 0.08, 0.05));
   s.alb = mix(sand, ice, gap);
-  s.nrm = rel / rad * 1.6 * gap;
+  s.nrm = rel / rad * 1.8 * gap;
   s.spec = 0.7 * gap; s.gloss = 60.0; s.emit = vec3(0.0); s.h = 0.0;
   return s;
 }
@@ -600,7 +601,7 @@ vec3 shadeOuter(vec2 p, float d, float vis, float fw) {
   vec3 es = cornerSpot(1.0, 1.2, uBorder);
   es.z *= 0.55;
   vec4 sat = saturnDisc(p, es, fw);
-  col = mix(col, sat.rgb, sat.a * 0.28 * smoothstep(0.2, 0.8, hz));
+  col = mix(col, mix(hc, sat.rgb, 0.6), sat.a * 0.17 * smoothstep(0.2, 0.8, hz));
   return col;
 }
 vec3 postShade(vec2 p, float d, vec3 col, float fw) {
@@ -632,17 +633,19 @@ Surf railSurf(float along, float across, bool vert) {
   s.emit += vec3(0.1, 0.5, 0.45) * moss * 0.25;
   for (int i = 0; i < 3; i++) {
     float fi = float(i);
-    float ci = 0.2 + 0.3 * fi + 0.12 * sin(along * (0.7 + 0.2 * fi) + fi * 2.1 + sd);
-    float wi = 0.1 + 0.03 * sin(along * 1.7 + fi * 3.0);
+    float ci = 0.2 + 0.3 * fi + 0.14 * sin(along * (0.7 + 0.2 * fi) + fi * 2.1 + sd);
+    float wi = 0.14 + 0.04 * sin(along * 1.7 + fi * 3.0);
     float dr = (a - ci) / wi;
     float over = sin(along * 0.9 + fi * 2.0);
     if (abs(dr) < 1.0 && (over > -0.3 || s.spec < 0.2)) {
       float cyl = sqrt(1.0 - dr * dr);
       float bark = vnoise(vec2(along * 7.0 + fi * 13.0, dr * 3.0));
-      s.alb = srgb(vec3(0.25, 0.13, 0.18)) * (0.55 + 0.6 * bark) * (0.5 + 0.5 * cyl);
+      s.alb = srgb(vec3(0.36, 0.2, 0.28)) * (0.55 + 0.6 * bark) * (0.45 + 0.55 * cyl);
       s.nrm = vec2(0.0, dr * 1.4 / max(cyl, 0.3));
       s.spec = 0.3; s.gloss = 30.0;
-      s.emit = vec3(0.0);
+      // sap veins glowing through the bark
+      float vein = 1.0 - smoothstep(0.0, 0.12, abs(dr - 0.35 * sin(along * 3.0 + fi)));
+      s.emit = vec3(0.15, 0.8, 0.9) * vein * 0.35 * (0.6 + 0.4 * sin(along * 1.3 - t * 1.2 + fi * 2.0));
     }
   }
   // crystal clusters
@@ -656,7 +659,7 @@ Surf railSurf(float along, float across, bool vert) {
   for (int k = 0; k < 3; k++) {
     float fk = float(k);
     vec2 off = vec2(cos(fk * 2.1 + h.x * 6.0), sin(fk * 2.1 + h.x * 6.0)) * 0.13 * step(0.5, fk);
-    float sz = (0.17 - fk * 0.035) * (0.8 + 0.4 * h.y);
+    float sz = (0.22 - fk * 0.045) * (0.8 + 0.4 * h.y);
     vec2 cp = rot2(h.z * 3.0 + fk) * (cc - off);
     float hd = hexD(cp) / sz;
     halo = max(halo, exp(-max(hd - 1.0, 0.0) * 3.0));
@@ -672,7 +675,7 @@ Surf railSurf(float along, float across, bool vert) {
       s.emit = glowC * (0.3 + 0.6 * (1.0 - hd)) * pulse;
     }
   }
-  s.emit += glowC * halo * 0.12 * pulse;
+  s.emit += glowC * halo * 0.2 * pulse;
   return s;
 }
 vec4 gasGiant(vec2 p, vec3 es, float fw) {
@@ -687,8 +690,8 @@ vec4 gasGiant(vec2 p, vec3 es, float fw) {
   vec3 n = vec3(q, sqrt(max(0.0, 1.0 - r * r)));
   vec2 bq = rot2(0.3) * q;
   float lat = bq.y / max(n.z, 0.2) * 0.6 + bq.y * 0.4;
-  float turb = fbm3(vec2(bq.x * 2.0 + uTime * 0.01, lat * 7.0));
-  float bands = 0.5 + 0.5 * sin(lat * 13.0 + turb * 2.5);
+  float turb = fbm3(vec2(bq.x * 2.5 + uTime * 0.01, lat * 9.0));
+  float bands = 0.5 + 0.5 * sin(lat * 9.0 + turb * 3.0) * (0.6 + 0.4 * sin(lat * 23.0 + turb * 5.0 + 1.3));
   vec3 alb = mix(srgb(vec3(0.34, 0.66, 0.72)), srgb(vec3(0.62, 0.52, 0.84)), bands);
   alb = mix(alb, srgb(vec3(0.9, 0.86, 0.82)), smoothstep(0.75, 0.95, bands) * 0.5);
   float storm = 1.0 - smoothstep(0.08, 0.13, length((bq - vec2(0.32, -0.28)) * vec2(1.0, 1.8)));
@@ -719,7 +722,7 @@ vec3 shadeOuter(vec2 p, float d, float vis, float fw) {
     emit += capC * 2.0 * smoothstep(0.75, 1.0, rl / rad) * (0.6 + 0.4 * sin(t * 1.1 + c.z * 30.0));
   }
   // bioluminescent fronds rooted along the rim, spreading outward
-  if (e > -0.05 && e < 3.6) {
+  if (e > -0.05 && e < 4.4) {
     vec2 cq = abs(p - uBoard * 0.5) - uBoard * 0.5;
     float along = cq.x > cq.y ? p.y + (p.x > uBoard.x * 0.5 ? 100.0 : 0.0) : p.x + (p.y > uBoard.y * 0.5 ? 200.0 : 300.0);
     float per = 1.45;
@@ -728,7 +731,7 @@ vec3 shadeOuter(vec2 p, float d, float vis, float fw) {
       float cid = base + float(k);
       vec3 h = hash32(vec2(cid, 17.0));
       float a0 = (cid + 0.5 + (h.x - 0.5) * 0.5) * per;
-      float len = 1.5 + 1.8 * h.y;
+      float len = 2.2 + 2.0 * h.y;
       float lean = (h.z - 0.5) * 0.9;
       float curl = (fract(h.x * 7.0) - 0.5) * 0.35;
       float u = e + 0.05;
@@ -757,9 +760,9 @@ vec3 shadeOuter(vec2 p, float d, float vis, float fw) {
   vec3 col = light(s, normalize(vec3(-nrm, 1.0)), vis * frameShadowVis(p));
   col *= mix(0.6, 1.0, smoothstep(0.0, 0.3, e));
   // far out the ground falls away into violet dusk sky with the gas giant
-  float sky = smoothstep(2.5, 7.0, e);
+  float sky = smoothstep(3.5, 8.0, e);
   vec3 dusk = mix(srgb(vec3(0.12, 0.05, 0.2)), srgb(vec3(0.03, 0.015, 0.07)), smoothstep(3.0, 16.0, e));
-  dusk += starfield(p, fw, 0.5, 0.0) * smoothstep(5.0, 12.0, e);
+  dusk += starfield(p, fw, 0.22, 0.0) * smoothstep(6.0, 14.0, e);
   col = mix(col, dusk, sky);
   vec3 es = cornerSpot(1.0, 1.3, uBorder);
   vec4 gg = gasGiant(p, es, fw);

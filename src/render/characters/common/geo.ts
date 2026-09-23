@@ -52,7 +52,7 @@ function indexify(g: THREE.BufferGeometry) {
 
 /** Mirror across the XZ plane (y → -y), fixing winding and normals. */
 export function mirrorY(g0: THREE.BufferGeometry): THREE.BufferGeometry {
-  const g = g0.clone();
+  const g = g0.index ? g0.clone() : indexify(g0.clone());
   const p = g.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) p.setY(i, -p.getY(i));
   const nr = g.getAttribute('normal') as THREE.BufferAttribute | undefined;

@@ -77,9 +77,13 @@ void main() {
   float m = max(max(l1, l2), l3);
   float n = vn(uv * 2.5 + vSeed * 11.0);
   m += (n - 0.5) * 0.25;
-  a = smoothstep(0.0, 0.25, m);
-  float curl = smoothstep(0.05, 0.12, abs(m - 0.18));
-  c *= (uSkyCol * 0.6 + uSunCol * 0.6) * (0.9 + 0.2 * smoothstep(0.0, 0.6, m)) * mix(0.82, 1.0, curl);
+  a = smoothstep(0.0, 0.08, m) * mix(1.0, 0.75, smoothstep(0.1, 0.5, m));
+  // inked outline + inner swirl line, like painted auspicious clouds
+  float rim = 1.0 - smoothstep(0.03, 0.09, m);
+  float curl = 1.0 - smoothstep(0.0, 0.035, abs(m - 0.24));
+  vec3 lit = uSkyCol * 0.6 + uSunCol * 0.6;
+  c *= lit * (0.92 + 0.15 * smoothstep(0.0, 0.6, m));
+  c = mix(c, c * vec3(0.55, 0.6, 0.72), max(rim, curl * 0.6));
 #else
   // ember / hot dot
   a = exp(-r2 * 7.0);

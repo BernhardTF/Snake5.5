@@ -35,7 +35,7 @@ const PRESETS: Record<QualityLevel, QualityPreset> = {
 /** Per-biome sand pattern relief (uPatAmp) and frame-lip height (rim shadow on the sand). */
 const PAT_AMP: Record<BiomeId, number> = {
   karesansui: 0.055, erg: 0.04, lagoon: 0.05, svartsandur: 0.04, salar: 0.03,
-  pinksands: 0.035, vaadhoo: 0.04, dallol: 0.035, luna: 0.03, mars: 0.035, titan: 0.03, kepler: 0.04,
+  pinksands: 0.045, vaadhoo: 0.04, dallol: 0.05, luna: 0.03, mars: 0.035, titan: 0.03, kepler: 0.065,
 };
 const FRAME_H: Record<BiomeId, number> = {
   karesansui: 0.32, erg: 0.36, lagoon: 0.3, svartsandur: 0.42, salar: 0.14,

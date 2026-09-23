@@ -1,5 +1,6 @@
 // Small shared helpers for Legend characters: instance matrix writers, PRNG, easing, ghost control.
 import * as THREE from 'three';
+import { LIGHT } from '../../lighting';
 
 export const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -137,3 +138,13 @@ export const ghostOpacity = (t: number) => 0.34 + 0.07 * Math.sin(t * 23) * Math
 
 /** sRGB hex → linear THREE.Color (convenience). */
 export const col = (hex: string | number) => new THREE.Color(hex);
+
+/**
+ * Strength multiplier for additive glows on the sand: full at night / in dim worlds, reduced in
+ * bright daylight where additive light would only wash the sand out.
+ */
+export function ambientGlowK() {
+  const s = LIGHT.sunColor.value, k = LIGHT.skyColor.value;
+  const lum = (s.r * 0.3 + s.g * 0.59 + s.b * 0.11) * 0.6 + (k.r * 0.3 + k.g * 0.59 + k.b * 0.11);
+  return clamp(1.35 - lum * 0.85, 0.3, 1.2);
+}

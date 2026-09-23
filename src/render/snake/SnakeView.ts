@@ -84,9 +84,9 @@ export class SnakeView implements ISnakeView {
   }
 
   /**
-   * Quality level (from GameRenderer.applyQuality). Only the crystal skin cares: medium+ uses real
-   * transmission (three renders the opaque scene once more into a transmission target), low uses a
-   * cheap alpha-blended glass. High/ultra add chromatic dispersion.
+   * Quality level (from GameRenderer.applyQuality). Only the crystal skin cares: high/ultra use real
+   * transmission (three renders the opaque scene once more into a transmission target, at half
+   * resolution on high), low/medium use a cheap alpha-blended glass. Ultra adds chromatic dispersion.
    */
   setQuality(q: QualityLevel) {
     if (q === this.quality) return;
@@ -97,10 +97,11 @@ export class SnakeView implements ISnakeView {
   private applyGlass() {
     const L = this.look;
     const glass = !!L?.glass;
-    const mode = !glass ? 'none' : this.quality === 'low' ? 'blend' : 'transmission';
+    const hi = this.quality === 'high' || this.quality === 'ultra';
+    const mode = !glass ? 'none' : hi ? 'transmission' : 'blend';
     const disp = this.quality === 'ultra' ? 0.3 : 0;
     this.glassBlend = setGlass(this.mat, this.u, mode, disp);
-    this.transScale = mode === 'transmission' ? (this.quality === 'medium' ? 0.5 : this.quality === 'high' ? 0.75 : 1) : 0;
+    this.transScale = mode === 'transmission' ? (this.quality === 'ultra' ? 1 : 0.5) : 0;
     // hint for the contact-shadow pass (glass casts a lighter shadow)
     this.mesh.userData.shadowOpacity = L?.shadow ?? 1;
   }

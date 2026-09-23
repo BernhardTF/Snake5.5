@@ -6,7 +6,7 @@ const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
 });
-const page = await browser.newPage({ viewport: { width: +w, height: +h }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: +w, height: +h }, deviceScaleFactor: +(process.env.DSF ?? 1) });
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
@@ -18,6 +18,7 @@ for (const a of JSON.parse(actions)) {
   if (a.eval) await page.evaluate(a.eval);
 }
 await page.waitForTimeout(+wait);
-await page.screenshot({ path: out, timeout: 180000 });
+const clip = process.env.CLIP ? (([x, y, width, height]) => ({ x, y, width, height }))(process.env.CLIP.split(',').map(Number)) : undefined;
+await page.screenshot({ path: out, timeout: 180000, clip });
 console.log(logs.slice(-40).join('\n'));
 await browser.close();

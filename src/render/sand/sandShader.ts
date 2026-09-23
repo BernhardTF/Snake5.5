@@ -95,11 +95,12 @@ vec3 shoreWater(vec3 under, vec2 p, float edgeN, float t, vec3 amb, vec3 sunC, v
   c = mix(c, sky, clamp(fres + 0.03 * calm, 0.0, 0.6));
   float sp = max(dot(R, L), 0.0);
   c += sunC * (pow(sp, 90.0) * 1.5 + pow(sp, 10.0) * 0.03);
-  vec3 g3 = gnoised(p * 7.0 + vec2(t * 0.9, -t * 0.7));
-  vec3 Ng = normalize(vec3(-g3.yz * 0.32, 1.0));
+  vec3 g3 = gnoised(p * 6.0 + vec2(t * 0.9, -t * 0.7));
+  vec3 Ng = normalize(vec3(-(g3.yz * 0.16 + g.yz * 0.1), 1.0));
   vec3 Hh = normalize(L + vec3(0.0, 0.0, 1.0));
-  float glit = pow(max(dot(Ng, Hh), 0.0), 700.0) * smoothstep(0.1, 0.6, e);
-  c += sunC * glit * 3.0;
+  float glit = pow(max(dot(Ng, Hh), 0.0), 2500.0) * smoothstep(0.2, 0.9, e)
+             * smoothstep(0.45, 0.8, vnoise(p * 0.6 + vec2(t * 0.1, 0.0)));
+  c += sunC * glit * 2.5;
   // swash lace: a thin foam line on the waterline + a few bubbly streaks right behind it
   float line = exp(-sq((edgeN - 0.03) / 0.035));
   vec2 fq = vec2(p.x * 0.8, e * 3.2 - t * 0.25);
@@ -252,29 +253,31 @@ vec2 pattern(vec2 p, vec4 nc) {
 vec2 pattern(vec2 p, vec4 nc) {
   // wet, compacted night beach: low swash ripples + backwash rills running down to the sea
   float warp = 0.6 * vnoise(p * 0.35);
-  float v = p.y * 2.4 + warp * 2.0 + 0.3 * sin(p.x * 0.5);
-  float rip = (0.5 + 0.5 * sin(v * 6.2831)) * smoothstep(0.35, 0.75, vnoise(p * 0.3 + 2.0)) * 0.3;
-  float rill = 1.0 - abs(gnoise(vec2(p.x * 1.7 + 0.5 * gnoise(p * vec2(0.6, 0.25)), p.y * 0.3)));
-  rill = smoothstep(0.86, 1.0, rill) * smoothstep(6.0, 2.8, uBoard.y - p.y);
-  return vec2(rip + vnoise(p * 2.0) * 0.14 - rill * 0.4, fbm3(p * 0.09) * 2.0);
+  float v = dot(p, vec2(0.25, 0.97)) * 2.2 + warp * 2.4 + 0.5 * sin(p.x * 0.37 + 1.3 * vnoise(p * 0.2));
+  float rip = (0.5 + 0.5 * sin(v * 6.2831)) * smoothstep(0.5, 0.85, vnoise(p * 0.22 + 2.0)) * 0.22;
+  float rill = 1.0 - abs(gnoise(vec2(p.x * 1.3 + 0.7 * gnoise(p * vec2(0.5, 0.2)), p.y * 0.22)));
+  rill = smoothstep(0.9, 1.0, rill) * smoothstep(5.0, 2.8, uBoard.y - p.y) * smoothstep(0.3, 0.6, vnoise(p * 0.4));
+  return vec2(rip + vnoise(p * 2.0) * 0.16 + fbm3(p * 0.7) * 0.2 - rill * 0.3, fbm3(p * 0.09) * 2.0);
 }
 #elif BIOME == 7
 // Dallol: brine pools (Voronoi pockets) evaluated once in main()
-float gPool = 0.0, gPoolRim = 0.0, gPoolD = 0.0, gPoolType = 0.0;
+float gPool = 0.0, gPoolRim = 0.0, gPoolD = 0.0, gPoolType = 0.0, gPoolRing = 0.0;
 float dallolTerr(vec2 p, out float lip) {
   float T = fbm3(p * 0.1 + 1.3) * 5.0 + 0.35 * vnoise(p * 0.6);
   float fr = fract(T);
   float strength = smoothstep(0.35, 0.6, fbm3(p * 0.06 + 8.0));
-  lip = exp(-sq((fr - 0.9) / 0.05)) * strength;
-  return (floor(T) + smoothstep(0.8, 0.97, fr)) * strength;
+  lip = exp(-sq((fr - 0.9) / 0.035)) * strength;
+  return (floor(T) + smoothstep(0.82, 0.95, fr)) * strength;
+}
+// "popcorn" crust: knobbly sulphur/salt blisters
+float dallolKnob(vec2 p) {
+  return sq(vnoise(p * 3.1)) * 0.65 + sq(vnoise(p * 6.7 + 2.0)) * 0.35 + vnoise(p * 13.0) * 0.08;
 }
 vec2 pattern(vec2 p, vec4 nc) {
-  // stepped salt terraces with raised rimstone lips + knobbly, blistered sulphur crust
   float lip;
   float st = dallolTerr(p, lip);
-  float knob = vnoise(p * 3.2) * 0.3 + vnoise(p * 7.0) * 0.12;
-  float blister = pow(vnoise(p * 1.4 + 3.0), 3.0) * 0.8;
-  return vec2(lip * 0.9 + knob + blister, st * 2.4);
+  float blister = pow(vnoise(p * 1.3 + 3.0), 3.0) * 0.7;
+  return vec2(lip * 0.6 + dallolKnob(p) * 1.3 + blister, st * 2.4);
 }
 #elif BIOME == 8
 // Luna: regolith clods; the crater fields are analytic (height + gradient) in main()
@@ -297,11 +300,13 @@ vec3 craterField(vec2 p, float fw, float S, float prob, float rMin, float rMax, 
     float dl = length(d);
     float r = dl / R;
     if (r > 2.2) continue;
-    vec2 pr = craterProf(r, rimH, rimW);
-    float Dp = R * depthK * smoothstep(1.2, 3.0, R / fw); // band-limit: fade sub-pixel craters
+    float age = fract(h.x * 7.3 + h.y * 3.1);               // most craters are old and degraded
+    age = sqrt(age);
+    vec2 pr = craterProf(r, rimH * (1.0 - 0.75 * age), rimW * (1.0 + age));
+    float Dp = R * depthK * mix(1.0, 0.3, age) * smoothstep(1.2, 3.0, R / fw); // band-limit: fade sub-pixel craters
     acc.x += pr.x * Dp;
     acc.yz += pr.y * Dp / R * d / max(dl, 1e-4);
-    gCrRim = max(gCrRim, exp(-sq((r - 1.0) / 0.25)) * (0.5 + 0.5 * h.x));
+    gCrRim = max(gCrRim, exp(-sq((r - 1.0) / 0.25)) * (1.0 - age));
   }
   return acc;
 }
@@ -350,10 +355,10 @@ vec3 pebbles(vec2 p, bool track) {
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 cc = cell + vec2(float(i), float(j));
     vec3 h = hash32(cc + 41.0);
-    float dens = 0.12 + 0.42 * smoothstep(0.3, 0.8, vnoise(cc * 0.21 + 3.0));
+    float dens = 0.05 + 0.33 * smoothstep(0.35, 0.85, vnoise(cc * 0.21 + 3.0));
     if (h.z > dens) continue;
-    vec2 c = (cc + 0.25 + 0.5 * hash22(cc * 1.3 + 5.0)) * S;
-    float R = S * (0.07 + 0.2 * h.x * h.x);
+    vec2 c = (cc + 0.3 + 0.4 * hash22(cc * 1.3 + 5.0)) * S;
+    float R = S * (0.06 + 0.26 * h.x * h.x * h.x);
     float an = h.y * 6.2831;
     vec2 d = p - c;
     vec2 q = vec2(dot(d, vec2(cos(an), sin(an))), dot(d, vec2(-sin(an), cos(an))));
@@ -503,29 +508,33 @@ void main() {
   vec2 dpx = vec2(dFdx(p.x), dFdy(p.y)); // ortho top-down: world units per pixel along x / y
 #if BIOME == 7
   {
-    vec3 pv = voronoi(p * 0.36 + 3.1, 0.85);
-    float sel = step(pv.y, 0.22);
-    float pr = 0.27 + 0.13 * fract(pv.y * 91.7);
-    float pd = pv.z + 0.05 * (vnoise(p * 1.6) - 0.5);
-    gPool = sel * (1.0 - smoothstep(pr - 0.03, pr, pd));
-    gPoolRim = sel * exp(-sq((pd - pr - 0.03) / 0.05));
+    vec3 pv = voronoi(p * 0.36 + 3.1, 0.6);
+    float sel = step(pv.y, 0.27);
+    float pr = 0.16 + 0.12 * fract(pv.y * 91.7);
+    float pd = pv.z + 0.045 * (vnoise(p * 1.6) - 0.5) + 0.025 * (vnoise(p * 4.0) - 0.5);
+    gPool = sel * (1.0 - smoothstep(pr - 0.02, pr, pd));
+    gPoolRim = sel * exp(-sq((pd - pr - 0.02) / 0.03));
     gPoolD = sel * clamp((pr - pd) / pr, 0.0, 1.0);
     gPoolType = fract(pv.y * 53.3);
-    float rimH = gPoolRim * 0.035;
+    // raised salt rim + concentric micro-terraces (rimstone rings) around each pool
+    float out_ = max(pd - pr, 0.0);
+    gPoolRing = sel * exp(-out_ / 0.09) * step(0.001, out_);
+    float rimH = gPoolRim * 0.035 + gPoolRing * 0.012 * sin(out_ * 55.0);
     grad += vec2(dFdx(rimH), dFdy(rimH)) / dpx;
     grad *= 1.0 - gPool; // liquid is flat: no pattern / trail relief inside the pools
   }
 #elif BIOME == 8
   vec3 bc = bigCraters(p);
-  vec3 mc = craterField(p, fw, 0.9, 0.5, 0.1, 0.42, 0.36, 0.22, 0.2, 3.0)
-          + craterField(p, fw, 2.7, 0.35, 0.12, 0.45, 0.24, 0.2, 0.25, 17.0);
+  vec3 mc = craterField(p, fw, 0.55, 0.45, 0.1, 0.4, 0.4, 0.22, 0.2, 3.0)
+          + craterField(p, fw, 1.3, 0.3, 0.12, 0.42, 0.34, 0.22, 0.22, 9.0)
+          + craterField(p, fw, 3.2, 0.25, 0.14, 0.45, 0.22, 0.2, 0.25, 17.0);
   grad += bc.yz + mc.yz * mix(1.0, 0.25, G);
 #elif BIOME == 9
   vec3 pb = pebbles(p, true);
   grad += pb.yz * keep;
 #elif BIOME == 11
   gFacet = voronoi(p * 4.2, 0.9);
-  grad += (hash22(vec2(gFacet.y * 71.0, 3.0)) - 0.5) * 0.32 * keep * smoothstep(0.0, 0.04, gFacet.x)
+  grad += (hash22(vec2(gFacet.y * 71.0, 3.0)) - 0.5) * 0.14 * keep * smoothstep(0.0, 0.04, gFacet.x)
         * (1.0 - smoothstep(0.3, 0.8, 4.2 * fw));
 #endif
 
@@ -613,7 +622,9 @@ void main() {
     // the trail turns up paler, whiter sand (B) that blends back over ~30 s
     float wh = clamp(D.b, 0.0, 1.0);
     wh = wh * wh * (3.0 - 2.0 * wh);
-    alb = mix(alb, uColB * vec3(1.0, 0.972, 0.96), wh * 0.8);
+    // keep the grain texture: scale the local albedo toward white instead of painting over it
+    vec3 paler = alb / max(luma(alb), 1e-3) * luma(uColB) * 0.35 + uColB * 0.65;
+    alb = mix(alb, paler * vec3(1.0, 0.975, 0.965), wh * 0.72);
     alb *= 1.0 - 0.04 * groove;
     // damp swash zone: darker, deeper pink, glossy (sheen added in the specials)
     float eN = lapEdgeN(p, uWave.x, uTime);
@@ -637,17 +648,25 @@ void main() {
   }
 #elif BIOME == 7
   {
-    // sulphur crust: acid yellow mottled with lime-green and orange-brown oxidised patches
-    float m1 = fbm3(p * 0.22 + 7.0), m2 = fbm3(p * 0.6 + 2.0);
-    alb *= 0.92 + 0.16 * m2;
-    alb = mix(alb, vec3(0.42, 0.55, 0.05) * (0.85 + 0.3 * m2), smoothstep(0.55, 0.78, m1) * 0.6);
-    float ox = smoothstep(0.62, 0.84, fbm3(p * 0.14 + 13.0));
-    alb = mix(alb, mix(uColC, vec3(0.28, 0.09, 0.02), 0.45) * (0.8 + 0.4 * m2), ox * 0.8);
-    // white salt: rimstone lips of the terraces and salt flats
+    // mineral colour fields with crisp, frothy boundaries: acid yellow (fresh sulphur), lime-green,
+    // orange-brown (older, oxidised iron) and white salt
+    vec2 wq = vec2(vnoise(p * 0.8), vnoise(p * 0.8 + 3.3)) * 0.9;
+    float fine = (vnoise(p * 2.6) - 0.5) * 0.1 + (vnoise(p * 6.0) - 0.5) * 0.05;
+    float m2 = fbm3(p * 0.6 + 2.0);
+    float kn = dallolKnob(p);
+    alb *= 0.78 + 0.4 * kn;                                   // crevices between blisters are darker
+    float fLime = smoothstep(0.6, 0.64, fbm3(p * 0.2 + 7.0 + wq) + fine);
+    alb = mix(alb, vec3(0.3, 0.5, 0.04) * (0.8 + 0.4 * kn), fLime * 0.75 * keep);
+    float fOx = smoothstep(0.68, 0.72, fbm3(p * 0.15 + 13.0 + wq * 1.3) + fine);
+    alb = mix(alb, mix(uColC, vec3(0.22, 0.07, 0.02), 0.45 + 0.4 * m2) * (0.65 + 0.7 * kn), fOx * 0.85 * keep);
     float lip;
     dallolTerr(p, lip);
-    float salt = smoothstep(0.52, 0.72, fbm3(p * 0.11 + 21.0));
-    alb = mix(alb, uColB * (0.94 + 0.06 * m2), clamp(max(salt * 0.9, lip * 0.85), 0.0, 1.0) * keep);
+    float salt = smoothstep(0.66, 0.7, fbm3(p * 0.12 + 21.0 + wq) + fine);
+    alb = mix(alb, uColB * (0.82 + 0.2 * kn), clamp(max(salt * 0.8, lip * 0.35), 0.0, 1.0) * keep);
+    // colour zoning around the pools: cream rimstone rings, then an orange-brown iron halo
+    float zone = clamp(gPoolRing, 0.0, 1.0);
+    vec3 ringC = mix(vec3(0.8, 0.66, 0.2), vec3(0.55, 0.26, 0.05), smoothstep(0.45, 0.08, zone));
+    alb = mix(alb, ringC * (0.8 + 0.2 * sin(zone * 40.0)), smoothstep(0.03, 0.5, zone) * 0.6 * keep);
     // polygonal crust plates (fine seams)
     vec3 cv = voronoi(p * 2.3, 0.8);
     alb *= 1.0 - 0.16 * (1.0 - smoothstep(0.01, 0.05, cv.x)) * keep;
@@ -660,7 +679,7 @@ void main() {
     float crack = (1.0 - smoothstep(0.012, 0.05, cr.x)) * Gd;
     alb = mix(alb, vec3(0.1, 0.03, 0.008), crack * 0.85);
     // brine pools: bright salt rim around the pocket
-    alb = mix(alb, uColB * 1.02, clamp(gPoolRim, 0.0, 1.0) * 0.9);
+    alb = mix(alb, vec3(0.9, 0.87, 0.66), clamp(gPoolRim, 0.0, 1.0) * 0.8);
   }
 #elif BIOME == 8
   {
@@ -685,7 +704,10 @@ void main() {
     // brighter fine dust gathers in the ripple troughs
     alb = mix(alb, uColB, (1.0 - smoothstep(0.1, 0.5, h0)) * 0.22 * keep);
     // pebbles (dark basalt with a dusty cap)
-    alb = mix(alb, mix(basalt * (0.9 + 0.8 * gPebH), uColA * 0.7, 0.18), gPeb * keep);
+    // dusty grey-brown rocks: dust settles on their upward faces
+    vec3 rock = mix(vec3(0.13, 0.115, 0.1), vec3(0.24, 0.18, 0.14), gPebH);
+    rock = mix(rock, uColA * 0.85, 0.35 * smoothstep(0.85, 1.0, N.z));
+    alb = mix(alb, rock, gPeb * keep);
     // scraped trail: the rusty dust comes off and dark grey-blue basalt shows through
     float scr = smoothstep(0.4, 0.95, G) * (1.0 - smoothstep(-0.4, 0.0, D.r));
     float resid = fbm3(p * 2.4);
@@ -712,7 +734,7 @@ void main() {
     vec3 tA = vec3(0.82, 0.92, 1.28), tB = vec3(1.2, 0.84, 1.08);
     vec3 tint = mix(tA, tB, step(0.5, fract(gFacet.y * 13.1)));
     float tf = (1.0 - smoothstep(0.3, 0.8, 4.2 * fw)) * step(0.55, gFacet.y);
-    alb *= mix(vec3(1.0), tint, 0.35 * tf * keep);
+    alb *= mix(vec3(1.0), tint, 0.16 * tf * keep);
     alb *= 1.0 - 0.12 * groove;
   }
 #endif
@@ -863,7 +885,7 @@ void main() {
 #elif BIOME == 10
   sparkAmt = 0.15;
 #else
-  sparkAmt = 2.2;
+  sparkAmt = 1.4;
 #endif
   col += uSunColor * glint * twinkle * sparkAmt * sunVis * keep;
 
@@ -930,7 +952,7 @@ void main() {
     float eN = lapEdgeN(p, uWave.x, uTime);
     if (eN > -0.3)
       col = shoreWater(col, p, eN, uTime, amb, uSunColor, L, uZenith, uHorizon,
-                       vec3(2.6, 0.5, 0.36), vec3(0.05, 0.34, 0.36), 0.95, 0.55 + 0.45 * uWave.w, vec3(0.0));
+                       vec3(2.6, 0.5, 0.3), vec3(0.03, 0.3, 0.42), 1.25, 0.55 + 0.45 * uWave.w, vec3(0.0));
   }
 #elif BIOME == 6
   {
@@ -955,7 +977,8 @@ void main() {
     float dotm = (1.0 - smoothstep(0.04, 0.2, length(pc))) * step(0.5, ph.z);
     float df = 1.0 - smoothstep(0.3, 0.9, 17.0 * fw);
     float flick = 0.55 + 0.45 * sin(uTime * (2.5 + ph.x * 5.0) + ph.y * 30.0);
-    float em = gl * (0.28 + (dotm * 2.6 * flick) * df + (1.0 - df) * 0.55);
+    float patchy = 0.35 + 0.65 * smoothstep(0.25, 0.75, vnoise(p * 2.3 + 7.0));
+    float em = gl * (0.13 * patchy + (dotm * 3.0 * flick) * df + (1.0 - df) * 0.5);
     // sparkles in the moving water near the edge
     vec3 wh = hash32(floor(p * 11.0 + vec2(0.0, uTime * 0.6)) + 3.0);
     vec2 wc = fract(p * 11.0 + vec2(0.0, uTime * 0.6)) - 0.5;
@@ -1054,13 +1077,15 @@ void main() {
       vec3 Nl = normalize(vec3(-rg, 1.0));
       vec3 Rl = reflect(-V, Nl);
       float bands = fbm3(p * vec2(0.05, 0.09) + Rl.xy * 1.5 + vec2(uTime * 0.004, 0.0));
-      vec3 hz = mix(uZenith, uHorizon, 0.35) * (0.8 + 0.45 * bands);
+      // sky radiance ~ irradiance / pi; liquid methane reflects ~2-4% of it: much darker than the dunes
+      vec3 hz = (uSkyColor * 1.4 + uSunColor * 0.6) * mix(vec3(1.0), uHorizon / max(luma(uHorizon), 1e-3), 0.3);
+      hz *= 0.75 + 0.5 * bands;
       float depth = smoothstep(0.0, 0.9, lk);
       vec3 bottom = col * exp(-vec3(3.0, 3.6, 4.2) * lk * 1.4);
-      vec3 liq = mix(bottom, vec3(0.006, 0.004, 0.003), depth);
-      liq += hz * 0.2;
+      vec3 liq = mix(bottom, vec3(0.002, 0.0015, 0.001), depth);
+      liq += hz * 0.045;
       // the hidden sun: a broad soft glint through the haze
-      liq += uSunColor * pow(max(dot(Nl, Hh), 0.0), 25.0) * 0.18;
+      liq += uSunColor * pow(max(dot(Nl, Hh), 0.0), 25.0) * 0.06;
       col = mix(col, liq, smoothstep(-0.06, 0.06, lk));
     }
   }
@@ -1070,8 +1095,9 @@ void main() {
     vec3 H2 = normalize(L2 + V);
     vec3 fh = hash32(vec2(gFacet.y * 113.0, 7.0));
     vec3 fnn = normalize(N + (fh - 0.5) * vec3(0.8, 0.8, 0.2));
-    float ff = (1.0 - smoothstep(0.3, 0.8, 4.2 * fw)) * keep * step(0.6, fh.z) * smoothstep(0.02, 0.1, gFacet.x);
-    float f1 = pow(max(dot(fnn, Hh), 0.0), 220.0), f2 = pow(max(dot(fnn, H2), 0.0), 220.0);
+    // a small bright point where the crystal's facet catches a sun (not the whole facet)
+    float ff = (1.0 - smoothstep(0.3, 0.8, 4.2 * fw)) * keep * step(0.72, fh.z) * (1.0 - smoothstep(0.03, 0.09, gFacet.z));
+    float f1 = pow(max(dot(fnn, Hh), 0.0), 300.0), f2 = pow(max(dot(fnn, H2), 0.0), 300.0);
     vec3 ftint = mix(vec3(1.0, 0.8, 1.0), vec3(0.8, 1.0, 1.0), fh.x);
     col += (uSunColor * f1 * sunVis + uSun2Color * f2 * sunVis2) * ftint * ff * 2.5;
     // fine sparkle from the second sun as well
@@ -1079,16 +1105,18 @@ void main() {
     // the trail shatters surface crystals into glowing magenta / cyan shards (B) that fade
     float gl = clamp(D.b, 0.0, 1.0);
     if (gl > 0.002) {
-      vec3 sv = voronoi(p * 6.5 + 3.3, 1.0);
-      float present = step(0.3, sv.y);
-      float thr = mix(0.2, 0.035, gl);             // shards shrink as they fade
-      float body = smoothstep(thr, thr + 0.03, sv.x) * present;
-      vec3 MAG = vec3(1.0, 0.1, 0.72), CYA = vec3(0.08, 0.85, 1.0);
-      vec3 sc = mix(MAG, CYA, step(0.62, sv.y));
-      float facet = 0.55 + 0.45 * sin(atan(sv.x, sv.z) * 3.0 + sv.y * 20.0); // split facets
-      float flick = 0.75 + 0.25 * sin(uTime * (2.0 + sv.y * 5.0) + sv.y * 40.0);
+      vec3 sv = voronoi(p * 4.2 + 3.3, 1.0);
+      float present = step(0.45, sv.y);
+      float thr = mix(0.3, 0.08, gl);              // shards shrink as they fade
+      float body = smoothstep(thr, thr + 0.025, sv.x) * present;
+      float halo = exp(-max(thr - sv.x, 0.0) / 0.05) * present * (1.0 - body);
+      vec3 MAG = vec3(1.0, 0.08, 0.7), CYA = vec3(0.05, 0.8, 1.0);
+      vec3 sc = mix(MAG, CYA, step(0.7, sv.y));
+      float facet = 0.5 + 0.5 * sin(atan(sv.x - 0.2, sv.z) * 4.0 + sv.y * 20.0); // split facets
+      float flick = 0.7 + 0.3 * sin(uTime * (2.0 + sv.y * 5.0) + sv.y * 40.0);
       float g = gl * gl;
-      col += sc * g * body * (0.5 + 1.2 * facet * (1.0 - sv.z)) * flick * 2.2;
+      col = mix(col, col * 0.35 + sc * 0.02, body * g);         // the shard itself is dark glass...
+      col += sc * g * flick * (body * (0.7 + 2.2 * facet * (1.0 - sv.z)) + halo * 0.35); // ...lit from inside
       // a soft coloured under-glow in the groove
       col += mix(MAG, CYA, 0.5 + 0.5 * sin(p.x * 0.7 + p.y * 0.5)) * g * 0.12 * groove;
     }
@@ -1098,6 +1126,7 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
   if (uDebug == 1) gl_FragColor = vec4(vec3(leaf), 1.0);
   else if (uDebug == 2) gl_FragColor = vec4(sh, 0.0, 1.0);
+  else if (uDebug == 5) gl_FragColor = vec4(shd, 1.0);
   else if (uDebug == 3) gl_FragColor = vec4(-D.r, D.g, max(D.r, 0.0) * 3.0, 1.0);
   else if (uDebug == 4) gl_FragColor = vec4(N * 0.5 + 0.5, 1.0);
   #include <tonemapping_fragment>

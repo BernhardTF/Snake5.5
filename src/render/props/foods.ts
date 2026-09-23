@@ -414,7 +414,7 @@ function conchPearl(): THREE.Group {
   const grp = new THREE.Group();
   // scallop half, inside up: broad rounded ribs, deep bowl, raised rim, hinge at -x
   const R = 0.34, span = 1.42, hx = -0.17, ribs = 11;
-  const coral = C('#e8506e'), pinkM = C('#f4868e'), cream = C('#ffe6d4');
+  const coral = C('#f08a6a'), pinkM = C('#fff0e4'), cream = C('#ffffff');
   const ribAt = (v: number) => Math.cos(v * ribs * Math.PI * 2);
   const zAt = (u: number, v: number) => 0.012 + 0.34 * R * Math.pow(u, 1.7) + 0.016 * ribAt(v) * u;
   const edge = (v: number) => R * (1 + 0.03 * ribAt(v)) * (0.93 + 0.07 * Math.cos(((v - 0.5) * 2) * Math.PI / 2));
@@ -426,9 +426,10 @@ function conchPearl(): THREE.Group {
   colorize(shell, (p) => {
     const dx = p.x - hx, rr = Math.hypot(dx, p.y) / R, a = Math.atan2(p.y, dx);
     const rib = ribAt(a / span * 0.5 + 0.5);
-    let c = lerpC(coral, pinkM, smoothstep(0.05, 0.6, rr));
-    c = lerpC(c, cream, smoothstep(0.68, 0.98, rr));
-    return c.multiplyScalar(0.84 + 0.16 * (rib * 0.5 + 0.5));
+    let c = lerpC(coral, pinkM, smoothstep(0.05, 0.45, rr));
+    c = lerpC(c, cream, smoothstep(0.7, 0.98, rr));
+    // warm tan rib troughs give the ivory fan structure against pink sand
+    return lerpC(c, C('#d8a888'), (0.5 - 0.5 * rib) * 0.55 * smoothstep(0.2, 0.5, rr));
   });
   const geos = [withCol(shell, shell)];
   // rolled cream rim (thickness) so the fan outline reads on pink sand
@@ -438,7 +439,7 @@ function conchPearl(): THREE.Group {
     rim.push(new THREE.Vector3(hx + Math.cos(a) * e, Math.sin(a) * e, zAt(1, v) - 0.004));
     rr.push(0.011);
   }
-  geos.push(sweep(rim, rr, 6, 0.8, () => C('#ffd8c4')));
+  geos.push(sweep(rim, rr, 6, 0.8, () => C('#fff6ee')));
   // hinge "ears"
   for (const s of [-1, 1]) {
     const ear = new THREE.SphereGeometry(0.045, 10, 6);
@@ -450,11 +451,12 @@ function conchPearl(): THREE.Group {
   const pg = new THREE.SphereGeometry(0.118, 28, 20);
   colorize(pg, (p, n) => {
     const flame = noise3(p.x * 42, p.y * 12, p.z * 42, 5);
-    const c = lerpC(C('#e04a70'), C('#ff9eb0'), smoothstep(-0.3, 0.9, n.z) * 0.85);
+    const c = lerpC(C('#d82a5c'), C('#ff7a9a'), smoothstep(-0.3, 0.9, n.z) * 0.85);
     return lerpC(c, C('#ffe2e8'), smoothstep(0.62, 0.8, flame) * 0.5);
   });
   pg.translate(0.03, 0, 0.13);
   grp.add(mesh(withCol(pg, pg), xm().pearl, 'pearl'));
+  grp.add(halo('#fff4e8', 1.05, 0.35));
   return grp;
 }
 
@@ -680,7 +682,7 @@ function starSeed(): THREE.Group {
 
 /** Worlds with a dark / black sky environment: plain metal reflects almost nothing there, so the
  * golden variant gets extra self-emission to still read (and bloom) as gold. */
-const GOLD_BOOST: Partial<Record<BiomeId, number>> = { luna: 0.9, vaadhoo: 0.55, titan: 0.45, kepler: 0.25, mars: 0.2 };
+const GOLD_BOOST: Partial<Record<BiomeId, number>> = { luna: 0.9, vaadhoo: 0.55, titan: 0.45, kepler: 0.25, mars: 0.2, dallol: 0.3 };
 const _boosted = new Map<number, { gold: THREE.MeshPhysicalMaterial; goldDark: THREE.MeshPhysicalMaterial }>();
 function goldify(src: THREE.Group, crystal: boolean, boost = 0): THREE.Group {
   const M0 = sharedMats();

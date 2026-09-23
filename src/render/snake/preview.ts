@@ -70,8 +70,21 @@ export function runPreview(params: URLSearchParams) {
   scene.add(sun, sun.target);
   scene.add(new THREE.HemisphereLight(0xb8c4d8, 0x8a7a66, 0.9));
 
+  // ground=checker: a checkered ground to judge refraction (crystal) and transparency
+  let groundTex: THREE.Texture | null = null;
+  if (params.get('ground') === 'checker') {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.fillStyle = (x + y) % 2 ? '#ffffff' : '#8a8a8a'; g.fillRect(x * 8, y * 8, 8, 8); }
+    groundTex = new THREE.CanvasTexture(c);
+    groundTex.colorSpace = THREE.SRGBColorSpace;
+    groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+    groundTex.magFilter = THREE.NearestFilter;
+  }
   const plane = (w: number, h: number, color: string, x: number, y: number) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color, roughness: 0.95 }));
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+    if (groundTex) { const t = groundTex.clone(); t.repeat.set(w / 4, h / 4); t.needsUpdate = true; mat.map = t; }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
     m.position.set(x, y, 0);
     m.receiveShadow = true;
     scene.add(m);
@@ -193,7 +206,8 @@ export function runPreview(params: URLSearchParams) {
       const warm = +(params.get('ff') ?? (40 + i * 13));
       let lastF: RenderFrame | null = null;
       for (let k = 0; k < warm; k++) { lastF = world.frame(1 / 30); sv.update(lastF); }
-      tick.push(() => { const f = world.frame(); f.foods = []; lastF = f; sv.update(f); });
+      const gridGhost = params.get('ghost') === '1';
+      tick.push(() => { const f = world.frame(); f.foods = []; f.snake.ghost = gridGhost; lastF = f; sv.update(f); });
       if (labels) {
         const el = document.createElement('div');
         el.textContent = sk.name + (sk.kind === 'legend' ? ' (legend)' : '');
