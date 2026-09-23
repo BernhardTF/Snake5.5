@@ -1,7 +1,10 @@
 // Snake renderer: procedural scaled tube + head parts, per-skin physical material.
 import * as THREE from 'three';
 import type { ISnakeView } from '../contract';
-import type { RenderFrame, SkinId } from '../../types';
+import type { CharacterId, RenderFrame, SkinId, SnakeSkinId } from '../../types';
+import { isLegend } from '../../skins/skins';
+import { createCharacter } from '../characters';
+import type { ICharacterView } from '../characters/contract';
 import { SnakeBody, type RingFrame } from './SnakeBody';
 import { SnakeHead } from './SnakeHead';
 import { DeathChain } from './DeathChain';
@@ -41,16 +44,41 @@ export class SnakeView implements ISnakeView {
     this.setSkin('obsidian');
   }
 
+  private character: ICharacterView | null = null;
+  private characters = new Map<CharacterId, ICharacterView | null>();
+
   setSkin(id: SkinId) {
     if (id === this.skin) return;
     this.skin = id;
-    const L = applySkin(this.mat, this.u, id);
+    if (this.character) {
+      this.object.remove(this.character.object);
+      this.character = null;
+    }
+    if (isLegend(id)) {
+      const cid = id as CharacterId;
+      if (!this.characters.has(cid)) this.characters.set(cid, createCharacter(cid));
+      this.character = this.characters.get(cid) ?? null;
+      if (this.character) {
+        this.object.add(this.character.object);
+        this.mesh.visible = false;
+        this.head.group.visible = false;
+        return;
+      }
+      id = 'obsidian'; // not implemented yet: fall back to the default snake look
+    }
+    const L = applySkin(this.mat, this.u, id as SnakeSkinId);
     this.head.setLook(L);
   }
 
   update(f: RenderFrame) {
     const s = f.snake;
     if (s.skin && s.skin !== this.skin) this.setSkin(s.skin);
+    if (this.character) {
+      this.mesh.visible = false;
+      this.head.group.visible = false;
+      this.character.update(f);
+      return;
+    }
     const dt = Math.max(0, Math.min(0.1, f.dt));
     this.r = s.radius || 0.34;
     this.u.uR.value = this.r;
@@ -107,6 +135,7 @@ export class SnakeView implements ISnakeView {
   }
 
   dispose() {
+    for (const c of this.characters.values()) c?.dispose();
     this.body.geometry.dispose();
     this.mat.dispose();
     this.head.dispose();

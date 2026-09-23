@@ -14,6 +14,7 @@ import { runtime } from '../core/runtime';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { levelFromXp, levelProgress, unlocksBetween } from '../game/progression';
 import { SKINS } from '../skins/skins';
+import { BIOMES } from '../biomes/biomes';
 import type { BiomeId, GameConfig, GameEvent, QualityLevel, RunResult, SkinId } from '../types';
 
 type State = 'menu' | 'countdown' | 'playing' | 'paused' | 'over';
@@ -191,6 +192,7 @@ export class App implements UIHost {
 
   previewSkin(id: SkinId) {
     this.previewSkinId = id;
+    this.audio.setCharacter(id);
   }
 
   private clearToastTimers() {
@@ -237,6 +239,7 @@ export class App implements UIHost {
     this.hudPattern = 0;
     this.pendingEvents = [];
     this.state = 'countdown';
+    this.audio.setCharacter(req.skin);
     this.audio.setScene('game');
     this.audio.setIntensity(0);
     this.audio.setTimeScale(1);
@@ -260,8 +263,7 @@ export class App implements UIHost {
   }
 
   private dailyBiome(): BiomeId {
-    const ids: BiomeId[] = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
-    return ids[hashString(todayKey()) % ids.length];
+    return BIOMES[hashString(todayKey()) % BIOMES.length].id;
   }
 
   pause() {
@@ -404,7 +406,7 @@ export class App implements UIHost {
     const unlocks = unlocksBetween(levelBefore, levelAfter);
     for (const id of earned) {
       const skin = SKINS.find((s) => s.unlockAchievement === id);
-      if (skin) unlocks.push(`Snake unlocked: ${skin.name}`);
+      if (skin) unlocks.push(`${skin.kind === 'legend' ? 'Legend' : 'Snake'} unlocked: ${skin.name}`);
     }
     store.saveProfile();
 

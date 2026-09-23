@@ -1,4 +1,4 @@
-import type { BiomeId, GameEvent } from '../types';
+import type { BiomeId, GameEvent, SkinId } from '../types';
 
 export type UiSound = 'hover' | 'click' | 'back' | 'start' | 'toggle' | 'achievement' | 'unlock' | 'countdown' | 'go';
 
@@ -17,6 +17,12 @@ export interface IAudioEngine {
   setTimeScale(v: number): void;
   /** Continuous slither loop: speed in cells/s (0 = silent), turn in rad/s. */
   setSlither(speed: number, turnRate: number): void;
+  /**
+   * The creature being played. Snakes share the slither loop; Legend characters get their own
+   * locomotion loop + signature sounds (centipede patter, eel crackle, dragon wind, mecha servos,
+   * train chuff/whistle, comet roar). Safe to call anytime (before unlock too).
+   */
+  setCharacter(id: SkinId): void;
   handleEvents(events: GameEvent[]): void;
   ui(sound: UiSound): void;
   /** Called when tab hidden/visible. */

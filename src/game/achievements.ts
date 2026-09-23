@@ -1,5 +1,8 @@
 import type { Profile } from '../core/storage';
-import type { GameConfig, RunStats } from '../types';
+import type { BiomeId, GameConfig, RunStats } from '../types';
+import { SKIN_BY_ID } from '../skins/skins';
+
+const PLANETS: BiomeId[] = ['luna', 'mars', 'titan', 'kepler'];
 
 export interface AchievementDef {
   id: string;
@@ -34,7 +37,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'daily', name: 'Daily Ritual', description: 'Finish a Daily Seed run.', icon: '📅', check: (r, c) => c.mode === 'daily' },
   { id: 'glide', name: 'Free Spirit', description: 'Score 300 in Free Glide.', icon: '🌀', check: (r, c) => c.movement === 'glide' && r.score >= 300 },
   { id: 'grid', name: 'Right Angles', description: 'Score 300 in Classic Grid.', icon: '▞', check: (r, c) => c.movement === 'grid' && r.score >= 300 },
-  { id: 'traveller', name: 'Traveller', description: 'Play in every world.', icon: '🧭', check: (r, c, p) => p.stats.biomesPlayed.length >= 5, progress: (p) => clamp01(p.stats.biomesPlayed.length / 5) },
+  { id: 'traveller', name: 'Traveller', description: 'Play in 5 different worlds.', icon: '🧭', check: (r, c, p) => p.stats.biomesPlayed.length >= 5, progress: (p) => clamp01(p.stats.biomesPlayed.length / 5) },
+  { id: 'cosmos', name: 'Cosmonaut', description: 'Play in all 12 worlds.', icon: '🌌', check: (r, c, p) => p.stats.biomesPlayed.length >= 12, progress: (p) => clamp01(p.stats.biomesPlayed.length / 12) },
+  { id: 'beyond', name: 'Beyond Earth', description: 'Play on all four worlds beyond Earth.', icon: '🪐', check: (r, c, p) => PLANETS.every((b) => p.stats.biomesPlayed.includes(b)), progress: (p) => clamp01(PLANETS.filter((b) => p.stats.biomesPlayed.includes(b)).length / 4) },
+  { id: 'moonwalker', name: 'Moonwalker', description: 'Score 1,000 on Luna.', icon: '🌕', check: (r, c) => c.biome === 'luna' && r.score >= 1000 },
+  { id: 'red_planet', name: 'Red Planet', description: 'Reach length 40 on Mars.', icon: '🔴', check: (r, c) => c.biome === 'mars' && r.length >= 40 },
+  { id: 'kepler_score', name: 'Stargazer', description: 'Score 1,500 on Kepler-186f.', icon: '✧', check: (r, c) => c.biome === 'kepler' && r.score >= 1500 },
+  { id: 'glow', name: 'Sea of Stars', description: 'Light up 40% of the shore in Vaadhoo.', icon: '✨', check: (r, c) => c.biome === 'vaadhoo' && r.pattern >= 0.4 },
+  { id: 'legend', name: 'Living Legend', description: 'Finish a run as a Legend character.', icon: '🐉', check: (r, c) => SKIN_BY_ID[c.skin]?.kind === 'legend' },
   { id: 'svart_score', name: 'Fire Walker', description: 'Score 1,000 in Svartsandur.', icon: '🔥', check: (r, c) => c.biome === 'svartsandur' && r.score >= 1000 },
   { id: 'runs25', name: 'Devotion', description: 'Play 25 runs.', icon: '⟳', check: (r, c, p) => p.stats.runs >= 25, progress: (p) => clamp01(p.stats.runs / 25) },
   { id: 'eat500', name: 'Glutton', description: 'Eat 500 foods in total.', icon: '🍽', check: (r, c, p) => p.stats.foodEaten >= 500, progress: (p) => clamp01(p.stats.foodEaten / 500) },

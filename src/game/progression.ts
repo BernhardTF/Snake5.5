@@ -45,6 +45,6 @@ export function isSkinUnlocked(profile: Profile, id: SkinId): boolean {
 export function unlocksBetween(levelBefore: number, levelAfter: number): string[] {
   const out: string[] = [];
   for (const b of BIOMES) if (b.unlockLevel > levelBefore && b.unlockLevel <= levelAfter) out.push(`World unlocked: ${b.name}`);
-  for (const s of SKINS) if (s.unlockLevel > 0 && s.unlockLevel > levelBefore && s.unlockLevel <= levelAfter) out.push(`Snake unlocked: ${s.name}`);
+  for (const s of SKINS) if (s.unlockLevel > 0 && s.unlockLevel > levelBefore && s.unlockLevel <= levelAfter) out.push(`${s.kind === 'legend' ? 'Legend' : 'Snake'} unlocked: ${s.name}`);
   return out;
 }

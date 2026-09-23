@@ -1,4 +1,6 @@
 import type { BiomeId, GameModeId, MovementMode, QualityLevel, SkinId } from '../types';
+import { BIOMES } from '../biomes/biomes';
+import { SKINS } from '../skins/skins';
 
 export type QualitySetting = QualityLevel | 'auto';
 export type GridTouchScheme = 'swipe' | 'dpad';
@@ -137,8 +139,8 @@ function write(key: string, value: unknown) {
 
 type Listener = () => void;
 
-const BIOME_IDS = ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'];
-const SKIN_IDS = ['obsidian', 'coral', 'emerald', 'albino', 'krait', 'rainbow', 'viper', 'ember'];
+const BIOME_IDS: string[] = BIOMES.map((b) => b.id);
+const SKIN_IDS: string[] = SKINS.map((s) => s.id);
 const MODE_IDS = ['classic', 'arcade', 'zen', 'timeattack', 'daily'];
 
 /** Replace any field whose type/enum doesn't match the defaults (corrupt or old saves). */

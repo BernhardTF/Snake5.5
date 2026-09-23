@@ -1,9 +1,19 @@
 // Shared contracts between simulation, renderer, audio and UI.
 // World space: 1 unit = 1 cell, board spans (0,0)-(W,H) on XY, +Z is up out of the sand.
 
-export type BiomeId = 'karesansui' | 'erg' | 'lagoon' | 'svartsandur' | 'salar';
-export type SkinId =
-  | 'obsidian' | 'coral' | 'emerald' | 'albino' | 'krait' | 'rainbow' | 'viper' | 'ember';
+export type EarthBiomeId =
+  | 'karesansui' | 'erg' | 'lagoon' | 'svartsandur' | 'salar'
+  | 'pinksands' | 'vaadhoo' | 'dallol';
+export type PlanetBiomeId = 'luna' | 'mars' | 'titan' | 'kepler';
+export type BiomeId = EarthBiomeId | PlanetBiomeId;
+
+/** Scaled snake skins (tube renderer + skin shader). */
+export type SnakeSkinId =
+  | 'obsidian' | 'coral' | 'emerald' | 'albino' | 'krait' | 'rainbow' | 'viper' | 'ember'
+  | 'gaboon' | 'bluecoral' | 'paradise' | 'sunbeam' | 'eyelash' | 'mangrove' | 'nebula' | 'crystal';
+/** Special non-snake characters ("Legends") with their own renderers. Same gameplay/hitbox. */
+export type CharacterId = 'centipede' | 'eel' | 'dragon' | 'mecha' | 'train' | 'comet';
+export type SkinId = SnakeSkinId | CharacterId;
 export type GameModeId = 'classic' | 'arcade' | 'zen' | 'timeattack' | 'daily';
 export type MovementMode = 'grid' | 'glide';
 export type QualityLevel = 'low' | 'medium' | 'high' | 'ultra';
