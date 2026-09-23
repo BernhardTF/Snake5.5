@@ -508,18 +508,19 @@ void main() {
   vec2 dpx = vec2(dFdx(p.x), dFdy(p.y)); // ortho top-down: world units per pixel along x / y
 #if BIOME == 7
   {
-    vec3 pv = voronoi(p * 0.36 + 3.1, 0.6);
-    float sel = step(pv.y, 0.27);
-    float pr = 0.16 + 0.12 * fract(pv.y * 91.7);
-    float pd = pv.z + 0.045 * (vnoise(p * 1.6) - 0.5) + 0.025 * (vnoise(p * 4.0) - 0.5);
-    gPool = sel * (1.0 - smoothstep(pr - 0.02, pr, pd));
-    gPoolRim = sel * exp(-sq((pd - pr - 0.02) / 0.03));
+    // few, large, irregular brine pools (lobed by noise) that read as ground, not as objects
+    vec3 pv = voronoi(p * 0.19 + 3.1, 0.6);
+    float sel = step(pv.y, 0.3);
+    float pr = 0.2 + 0.1 * fract(pv.y * 91.7);
+    float pd = pv.z + 0.16 * (vnoise(p * 0.45 + 2.0) - 0.5) + 0.07 * (vnoise(p * 1.3) - 0.5) + 0.02 * (vnoise(p * 4.0) - 0.5);
+    gPool = sel * (1.0 - smoothstep(pr - 0.012, pr, pd));
+    gPoolRim = sel * exp(-sq((pd - pr - 0.012) / 0.02));
     gPoolD = sel * clamp((pr - pd) / pr, 0.0, 1.0);
     gPoolType = fract(pv.y * 53.3);
     // raised salt rim + concentric micro-terraces (rimstone rings) around each pool
     float out_ = max(pd - pr, 0.0);
-    gPoolRing = sel * exp(-out_ / 0.09) * step(0.001, out_);
-    float rimH = gPoolRim * 0.035 + gPoolRing * 0.012 * sin(out_ * 55.0);
+    gPoolRing = sel * exp(-out_ / 0.07) * step(0.001, out_);
+    float rimH = gPoolRim * 0.018 + gPoolRing * 0.008 * sin(out_ * 90.0);
     grad += vec2(dFdx(rimH), dFdy(rimH)) / dpx;
     grad *= 1.0 - gPool; // liquid is flat: no pattern / trail relief inside the pools
   }
@@ -661,17 +662,17 @@ void main() {
     float kn = dallolKnob(p);
     alb *= 0.78 + 0.4 * kn;                                   // crevices between blisters are darker
     float fLime = smoothstep(0.6, 0.64, fbm3(p * 0.2 + 7.0 + wq) + fine);
-    alb = mix(alb, vec3(0.3, 0.5, 0.04) * (0.8 + 0.4 * kn), fLime * 0.75 * keep);
+    alb = mix(alb, vec3(0.36, 0.5, 0.08) * (0.85 + 0.3 * kn), fLime * 0.5 * keep);
     float fOx = smoothstep(0.68, 0.72, fbm3(p * 0.15 + 13.0 + wq * 1.3) + fine);
-    alb = mix(alb, mix(uColC, vec3(0.22, 0.07, 0.02), 0.45 + 0.4 * m2) * (0.65 + 0.7 * kn), fOx * 0.85 * keep);
+    alb = mix(alb, mix(uColC, vec3(0.3, 0.12, 0.04), 0.35 + 0.3 * m2) * (0.75 + 0.5 * kn), fOx * 0.6 * keep);
     float lip;
     dallolTerr(p, lip);
     float salt = smoothstep(0.66, 0.7, fbm3(p * 0.12 + 21.0 + wq) + fine);
-    alb = mix(alb, uColB * (0.82 + 0.2 * kn), clamp(max(salt * 0.8, lip * 0.35), 0.0, 1.0) * keep);
+    alb = mix(alb, uColB * (0.78 + 0.2 * kn), clamp(max(salt * 0.55, lip * 0.35), 0.0, 1.0) * keep);
     // colour zoning around the pools: cream rimstone rings, then an orange-brown iron halo
     float zone = clamp(gPoolRing, 0.0, 1.0);
     vec3 ringC = mix(vec3(0.8, 0.66, 0.2), vec3(0.55, 0.26, 0.05), smoothstep(0.45, 0.08, zone));
-    alb = mix(alb, ringC * (0.8 + 0.2 * sin(zone * 40.0)), smoothstep(0.03, 0.5, zone) * 0.6 * keep);
+    alb = mix(alb, ringC * (0.85 + 0.15 * sin(zone * 40.0)), smoothstep(0.03, 0.5, zone) * 0.35 * keep);
     // polygonal crust plates (fine seams)
     vec3 cv = voronoi(p * 2.3, 0.8);
     alb *= 1.0 - 0.16 * (1.0 - smoothstep(0.01, 0.05, cv.x)) * keep;
@@ -680,13 +681,15 @@ void main() {
     gCrack = cr;
     float Gd = smoothstep(0.1, 0.6, G);
     // iron salts: ochre to rust-brown per plate, with pale salt dusting (older, darker plates vary)
-    vec3 iron = mix(uColC * 0.85, vec3(0.36, 0.1, 0.02), cr.y) * (0.7 + 0.45 * cr.z);
-    iron = mix(iron, uColA * 0.8, step(0.82, fract(cr.y * 7.7)) * 0.6);
-    alb = mix(alb, iron, Gd * 0.8);
-    float crack = (1.0 - smoothstep(0.012, 0.05, cr.x)) * Gd;
-    alb = mix(alb, vec3(0.1, 0.03, 0.008), crack * 0.85);
+    // one coherent ochre groove first; plates vary only a little, fissures are soft
+    vec3 iron = mix(uColC * 0.8, vec3(0.4, 0.13, 0.03), 0.35 + 0.3 * cr.y) * (0.85 + 0.2 * cr.z);
+    alb = mix(alb, iron, Gd * 0.7);
+    float crack = (1.0 - smoothstep(0.008, 0.035, cr.x)) * Gd;
+    alb = mix(alb, alb * 0.55, crack * 0.6);
     // brine pools: bright salt rim around the pocket
-    alb = mix(alb, vec3(0.9, 0.87, 0.66), clamp(gPoolRim, 0.0, 1.0) * 0.8);
+    alb = mix(alb, mix(alb, vec3(0.85, 0.82, 0.55), 0.5), clamp(gPoolRim, 0.0, 1.0) * 0.5);
+    // pull the whole crust back ~25% toward its own luminance (keeps the acid hue, calmer field)
+    alb = mix(alb, vec3(luma(alb)) * vec3(1.02, 1.0, 0.9), 0.15);
   }
 #elif BIOME == 8
   {
