@@ -179,10 +179,13 @@ interface Emit { set: BurstSet; cols: THREE.Color[]; count: number; speed: numbe
 interface BurstFx { eat: Emit[]; gold: Emit[]; phys: Partial<Record<BurstSet, Partial<BurstPhys>>> }
 const cl = (...h: string[]) => h.map((x) => new THREE.Color(x));
 const GOLD = cl('#ffd35a', '#fff0b0', '#ffb020');
-const goldFx = (set: BurstSet): Emit[] => [
-  { set, cols: GOLD, count: 20, speed: 2.8, size: set === 'flake' ? 0.1 : 0.06, glow: 1.2 },
-  { set: 'spark', cols: GOLD, count: 12, speed: 2.4, size: 0.05, glow: 2 },
-];
+const goldFx = (set: BurstSet, dark = false): Emit[] => dark
+  // dim worlds: lit flakes would read brown, so the whole golden burst is emissive sparks
+  ? [{ set: 'spark', cols: GOLD, count: 30, speed: 2.6, size: 0.055, glow: 2 }]
+  : [
+    { set, cols: GOLD, count: 20, speed: 2.8, size: set === 'flake' ? 0.1 : 0.06, glow: 1.2 },
+    { set: 'spark', cols: GOLD, count: 12, speed: 2.4, size: 0.05, glow: 2 },
+  ];
 /** Eat-scatter look per world. Worlds not listed use the classic flake burst. */
 const FX: Partial<Record<BiomeId, BurstFx>> = {
   pinksands: {
@@ -197,7 +200,7 @@ const FX: Partial<Record<BiomeId, BurstFx>> = {
       { set: 'spark', cols: cl('#6fe0ff', '#c8f4ff', '#2e9cff'), count: 26, speed: 1.8, size: 0.06, glow: 2.5 },
       { set: 'flake', cols: cl('#f6eee2', '#c6bcd8'), count: 8, speed: 1.8, size: 0.09 },
     ],
-    gold: goldFx('flake'),
+    gold: goldFx('flake', true),
     phys: { spark: { gravity: 1.2, airDrag: 2.2, flutter: 2.5, upMin: 0.6, upMax: 1.6, lifeMin: 1.2, lifeMax: 2.2, vzDamp: 1.5 } },
   },
   dallol: {
@@ -209,13 +212,13 @@ const FX: Partial<Record<BiomeId, BurstFx>> = {
   },
   luna: {
     eat: [
-      { set: 'cube', cols: cl('#a8a6a0', '#6e6c68', '#8a8884'), count: 14, speed: 1.6, size: 0.05 },
-      { set: 'spark', cols: cl('#bfe6ff', '#e8f8ff', '#7ac0ff'), count: 16, speed: 1.6, size: 0.05, glow: 2 },
+      { set: 'cube', cols: cl('#a8a6a0', '#6e6c68', '#8a8884'), count: 14, speed: 0.9, size: 0.05 },
+      { set: 'spark', cols: cl('#bfe6ff', '#e8f8ff', '#7ac0ff'), count: 16, speed: 0.9, size: 0.05, glow: 2 },
     ],
-    gold: goldFx('cube'),
+    gold: goldFx('cube', true),
     phys: {
-      cube: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 1.2, upMax: 2.4, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 0, spin: 6 },
-      spark: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 1.2, upMax: 2.4, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 0, spin: 6 },
+      cube: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 0.8, upMax: 1.6, lifeMin: 1.4, lifeMax: 2.0, vzDamp: 0, spin: 6 },
+      spark: { gravity: 1.62, airDrag: 0, flutter: 0, upMin: 0.8, upMax: 1.6, lifeMin: 1.4, lifeMax: 2.0, vzDamp: 0, spin: 6 },
     },
   },
   mars: {
@@ -228,7 +231,7 @@ const FX: Partial<Record<BiomeId, BurstFx>> = {
   },
   titan: {
     eat: [{ set: 'flake', cols: cl('#f0862e', '#b85a1c', '#ffc070'), count: 22, speed: 1.4, size: 0.11 }],
-    gold: goldFx('flake'),
+    gold: goldFx('flake', true),
     phys: { flake: { gravity: 1.35, airDrag: 3.2, flutter: 2.2, upMin: 0.8, upMax: 1.8, lifeMin: 1.8, lifeMax: 2.6, vzDamp: 1.8, spin: 6 } },
   },
   kepler: {

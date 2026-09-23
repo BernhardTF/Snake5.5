@@ -78,7 +78,7 @@ export class EelView extends LegendBase {
         vec2 g = vec2(s / mix(0.085, 0.045, head), d * 14.0);
         vec2 f = fract(g) - 0.5;
         float dot1 = (1.0 - smoothstep(0.12, 0.26, length(f * vec2(1.0, 1.3)))) * max(rows, rowsH);
-        c = mix(c, vec3(0.8, 0.72, 0.42), dot1 * 0.7);
+        c = mix(c, vec3(0.55, 0.5, 0.3), dot1 * 0.45);
         // mouth crease + pale lip at the blunt snout
         float sn = s - vInfo.y;
         float mouth = (1.0 - smoothstep(0.035, 0.075, sn)) * (1.0 - smoothstep(0.28, 0.5, d));
@@ -120,8 +120,8 @@ export class EelView extends LegendBase {
     this.finGeo.setIndex(new THREE.BufferAttribute(idx, 1));
     this.finGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
     this.finMat = patch(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, roughness: 0.3, metalness: 0, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
-      clearcoat: 0.35, clearcoatRoughness: 0.3, iridescence: 0.5, iridescenceIOR: 1.35, depthWrite: true,
+      color: 0xffffff, roughness: 0.55, metalness: 0, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
+      iridescence: 0.35, iridescenceIOR: 1.3, depthWrite: true,
     }), {
       uniforms: { uFlash: u.uFlash, uDead: u.uDead },
       vertDecl: 'varying vec2 vFin;', vert: 'vFin = uv;',
@@ -129,9 +129,9 @@ export class EelView extends LegendBase {
       color: /* glsl */ `
         float across = vFin.x;      // 0 root → 1 edge
         float rays = 0.5 + 0.5 * cos(vFin.y * 150.0);
-        vec3 c = mix(vec3(0.025, 0.03, 0.016), vec3(0.075, 0.07, 0.035), across);
-        c *= 0.7 + 0.5 * rays;
-        c = mix(c, vec3(0.3, 0.2, 0.07), smoothstep(0.85, 1.0, across) * 0.7);
+        vec3 c = mix(vec3(0.02, 0.024, 0.012), vec3(0.05, 0.045, 0.02), across);
+        c *= 0.65 + 0.5 * rays;
+        c = mix(c, vec3(0.16, 0.1, 0.03), smoothstep(0.85, 1.0, across) * 0.7);
         diffuseColor.rgb = c;
         diffuseColor.a *= mix(1.0, 0.6, across) * (0.7 + 0.3 * rays);
       `,
@@ -217,19 +217,19 @@ export class EelView extends LegendBase {
 
     // ------------- eyes (small, set wide on the blunt head)
     {
-      const se = 0.035 * sc;
+      const se = 0.07 * sc;
       const qi = tube.ringAt(se);
       const tx = tube.tx[qi], ty = tube.ty[qi], w = tube.w[qi], h = tube.h[qi], z = tube.zc[qi];
       const cx = tube.x[qi] - ty * tube.off[qi], cy = tube.y[qi] + tx * tube.off[qi];
       const m = this.eyes.instanceMatrix.array as Float32Array;
-      const er = 0.034 * sc;
+      const er = 0.042 * sc;
       for (let e = 0; e < 2; e++) {
         const sg = e === 0 ? 1 : -1;
-        const lat = sg * w * 0.62;
+        const lat = sg * w * 0.55;
         const o = e * 16;
         m.fill(0, o, o + 16);
         m[o] = er; m[o + 5] = er; m[o + 10] = er * 0.8; m[o + 15] = 1;
-        m[o + 12] = cx - ty * lat; m[o + 13] = cy + tx * lat; m[o + 14] = z + h * 0.62;
+        m[o + 12] = cx - ty * lat; m[o + 13] = cy + tx * lat; m[o + 14] = z + h * 0.72;
       }
       this.eyes.instanceMatrix.needsUpdate = true;
       const eg = (alive ? 1.2 + 0.5 * Math.sin(this.t * 31) * crackle + 3 * this.flash : 1.5 * Math.max(0, 1 - td / 1.2)) * this.glowFade;

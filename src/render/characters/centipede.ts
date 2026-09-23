@@ -118,9 +118,9 @@ export class CentipedeView extends LegendBase {
     const fangG = limb([[0, 0, 0], [0.11, 0.035, 0.012], [0.21, 0.0, 0.02], [0.25, -0.08, 0.022], [0.235, -0.115, 0.02]], [0.058, 0.048, 0.032, 0.016, 0.004], 8);
     paintGrad(fangG, 1, -0.1, 0.02, '#080201', '#8a2610');
     this.fangL = new THREE.Mesh(fangG, fangMat);
-    this.fangL.position.set(0.04, 0.13, 0.05);
+    this.fangL.position.set(0.1, 0.12, 0.045);
     this.fangR = new THREE.Mesh(mirrorY(fangG), fangMat);
-    this.fangR.position.set(0.04, -0.13, 0.05);
+    this.fangR.position.set(0.1, -0.12, 0.045);
     for (const m of [hp, eyes, this.fangL, this.fangR]) { m.castShadow = true; m.receiveShadow = true; this.head.add(m); }
     this.head.matrixAutoUpdate = false;
     for (let i = 0; i < this.legSeed.length; i++) this.legSeed[i] = Math.random();
