@@ -80,7 +80,7 @@ export class CentipedeView extends LegendBase {
     const fangMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 });
     this.solids.push(plateMat, headMat, memMat, legMat, beadMat, eyeMat, fangMat);
 
-    const dome = superDome(44, 8, 3.6, 0.32, 0.55);
+    const dome = superDome(18, 5, 3.6, 0.32, 0.55); // low-poly: ~3 plates per cell, long bodies
     {
       // shingle: low front edge tucks under the previous plate, raised rear margin overlaps the next
       const pa = dome.getAttribute('position') as THREE.BufferAttribute;
@@ -103,9 +103,11 @@ export class CentipedeView extends LegendBase {
     this.legsR = instanced(mirrorY(legG), legMat, MAXSEG, true);
     this.beads = instanced(ellipsoid(0.5, 0.5, 0.5, 0, 0, 0, 8, 5), beadMat, 64, true);
     for (const m of [this.plates, this.membranes, this.legsL, this.legsR, this.beads]) { m.castShadow = true; m.receiveShadow = true; }
+    // thin parts don't need to be drawn again in the contact-shadow pass
+    for (const m of [this.membranes, this.legsL, this.legsR, this.beads]) m.userData.noShadow = true;
 
     // head capsule
-    const hp = new THREE.Mesh(superDome(40, 8, 2.6, 0.3, 0.5), headMat);
+    const hp = new THREE.Mesh(superDome(28, 6, 2.6, 0.3, 0.5), headMat);
     hp.scale.set(0.36, 0.56, 0.13);
     hp.position.set(-0.01, 0, 0.035);
     const eyes = new THREE.Mesh(merge([

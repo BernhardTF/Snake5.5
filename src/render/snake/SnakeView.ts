@@ -58,6 +58,12 @@ export class SnakeView implements ISnakeView {
   private character: ICharacterView | null = null;
   private characters = new Map<CharacterId, ICharacterView | null>();
 
+  /** Create (and cache) a Legend's renderer without showing it, e.g. to precompile its shaders. */
+  prepareCharacter(cid: CharacterId): ICharacterView | null {
+    if (!this.characters.has(cid)) this.characters.set(cid, createCharacter(cid));
+    return this.characters.get(cid) ?? null;
+  }
+
   setSkin(id: SkinId) {
     if (id === this.skin) return;
     this.skin = id;

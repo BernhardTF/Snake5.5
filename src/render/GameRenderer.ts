@@ -1,6 +1,7 @@
 // GameRenderer: orchestrates the sand simulation, biome materials, frame, shadows, particles,
 // snake/props views and post-processing. Implements the IGameRenderer contract.
 import * as THREE from 'three';
+import type { CharacterId } from '../types';
 import type { BiomeId, QualityLevel, RenderFrame, SkinId } from '../types';
 import type { IGameRenderer, RenderOptions } from './contract';
 import { LIGHT } from './lighting';
@@ -329,6 +330,60 @@ export class GameRenderer implements IGameRenderer {
     this.sandMesh.material = sm; this.frameMesh.material = fm;
     this.sim.compile(r);
     this.post.compile(r);
+  }
+
+  private warmed = new Set<CharacterId>();
+  private warmTarget = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+
+  /**
+   * Compile Legend character shaders in the background (one per idle slice) so the first time a
+   * player picks one there is no frame hitch. Safe to call repeatedly with newly unlocked ids.
+   */
+  warmCharacters(ids: CharacterId[]) {
+    const queue = ids.filter((id) => !this.warmed.has(id));
+    const next = () => {
+      const id = queue.shift();
+      if (!id) return;
+      this.warmed.add(id);
+      const view = this.snakeView.prepareCharacter(id);
+      const obj = view?.object;
+      if (view && obj && !obj.parent) {
+        // one update creates lazily-built parts (particles, glows) so their programs compile too
+        if (this.lastFrame) {
+          try { view.update({ ...this.lastFrame, events: [], snake: { ...this.lastFrame.snake, skin: id } }); } catch { /* ignore */ }
+        }
+        const warm = new THREE.Scene();
+        warm.add(obj);
+        const r = this.renderer;
+        const prev = r.getRenderTarget();
+        r.setRenderTarget(this.post.enabled ? this.post.target : null);
+        const done = r.compileAsync(warm, this.camera, this.scene);
+        r.setRenderTarget(prev);
+        done.catch(() => {}).finally(() => {
+          // draw once off-screen so geometry buffers and textures are uploaded ahead of time
+          if (obj.parent === warm) {
+            try {
+              const p = r.getRenderTarget();
+              // the real target matters: program variants depend on its colour space
+              r.setRenderTarget(this.post.enabled ? this.post.target : this.warmTarget);
+              r.render(warm, this.camera);
+              // and once with the contact-shadow occluder material (instanced variants differ)
+              warm.overrideMaterial = this.shadows.occluderMaterial;
+              r.render(warm, this.camera);
+              warm.overrideMaterial = null;
+              r.setRenderTarget(p);
+            } catch { /* ignore */ }
+            if (obj.parent === warm) warm.remove(obj);
+          }
+          idle(next);
+        });
+      } else idle(next);
+    };
+    const idle = (fn: () => void) => {
+      const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined;
+      if (ric) ric(fn, { timeout: 1500 }); else setTimeout(fn, 200);
+    };
+    idle(next);
   }
 
   private fitCamera() {

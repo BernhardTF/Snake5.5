@@ -2,7 +2,7 @@
 
 *Snake, re-imagined.* A 2026 remake of Snake in which the board is a living sand diorama, seen
 from above. The snake is a lit 3D creature that presses a lasting groove into the sand. There are
-five worlds, and each has its own culture, light, sand behaviour and music.
+twelve worlds, on Earth and beyond, and each has its own culture, light, sand behaviour and music.
 
 | World | Place | What the sand does |
 |---|---|---|
@@ -11,6 +11,13 @@ five worlds, and each has its own culture, light, sand behaviour and music.
 | **Motu Lagoon** | Polynesia | Wet sunset sand; waves roll in and wash trails away |
 | **Svartsandur** | Iceland | Black volcanic sand; your trail cracks the crust and exposes glowing embers |
 | **Salar** | Bolivia | Salt-crust polygons under a mirror film; wet trails dry over time |
+| **Pink Sands** | Bahamas | Rose-pink shell sand; the trail turns up whiter sand; turquoise shallows |
+| **Vaadhoo** | Maldives | A night shore; bioluminescent plankton makes the trail glow blue |
+| **Dallol** | Ethiopia | Acid-yellow sulphur crust and brine pools; the trail cracks the crust |
+| **Luna** | The Moon | Regolith and craters with Earth overhead; trails last forever |
+| **Mars** | Jezero Crater | The trail scrapes rust off the basalt; dust devils refill it |
+| **Titan** | Moon of Saturn | Hydrocarbon dunes, a methane lake and drizzle that softens trails |
+| **Kepler-186f** | Exoplanet | Twin suns cast two shadows; crystals shatter where you pass |
 
 ## Features
 - **Movement**: *Classic Grid* (four directions, corner forgiveness, input buffering) or
@@ -20,8 +27,10 @@ five worlds, and each has its own culture, light, sand behaviour and music.
 - **Scoring**: combos up to ×8, near-miss bonuses, length milestones, and a *pattern* score for
   how much of the garden you've raked.
 - **Power-ups**: Slow Time, Ghost, Magnet, Double, Shed Skin.
-- **Progression**: levels, 24 achievements, 8 unlockable snakes, and per-mode, per-world records
-  with lifetime statistics.
+- **Progression**: 30 levels, 31 achievements, 16 snakes and 6 **Legends** (special characters
+  unlocked at levels 13–28), plus per-mode, per-world records with lifetime statistics.
+- **Legends**: a Centipede, a Volt Eel, the Lóng dragon, a Mecha serpent, the Express steam
+  train and a Comet. Each has its own model, animation and sound, and all share the snake's hitbox.
 - **Graphics**: GPU sand-deformation simulation, a procedural snake and props, soft contact
   shadows, leaf and cloud shadows, bloom, tilt-shift, colour grading, and quality presets that can
   switch automatically.

@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Serpent Sands',
         short_name: 'Serpent Sands',
-        description: 'Snake, re-imagined: a living sand diorama across five cultures.',
+        description: 'Snake, re-imagined: a living sand diorama across twelve worlds, on Earth and beyond.',
         theme_color: '#1b1612',
         background_color: '#1b1612',
         display: 'fullscreen',

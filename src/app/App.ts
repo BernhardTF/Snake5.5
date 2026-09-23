@@ -12,10 +12,10 @@ import { store, bestKey, todayKey, type Settings } from '../core/storage';
 import { hashString } from '../core/rng';
 import { runtime } from '../core/runtime';
 import { ACHIEVEMENTS } from '../game/achievements';
-import { levelFromXp, levelProgress, unlocksBetween } from '../game/progression';
-import { SKINS } from '../skins/skins';
+import { isSkinUnlocked, levelFromXp, levelProgress, unlocksBetween } from '../game/progression';
+import { SKINS, LEGENDS } from '../skins/skins';
 import { BIOMES } from '../biomes/biomes';
-import type { BiomeId, GameConfig, GameEvent, QualityLevel, RunResult, SkinId } from '../types';
+import type { BiomeId, CharacterId, GameConfig, GameEvent, QualityLevel, RunResult, SkinId } from '../types';
 
 type State = 'menu' | 'countdown' | 'playing' | 'paused' | 'over';
 const QUALITY_ORDER: QualityLevel[] = ['low', 'medium', 'high', 'ultra'];
@@ -84,6 +84,7 @@ export class App implements UIHost {
     this.attract = new Attract(this.biome, this.previewSkinId, this.boardW, this.boardH);
     this.applyAudioSettings();
     this.audio.setBiome(this.biome);
+    this.audio.setCharacter(this.previewSkinId);
     this.audio.setScene('menu');
 
     // unlock/recover audio on every gesture (iOS can interrupt the context)
@@ -102,6 +103,13 @@ export class App implements UIHost {
 
     this.ui.show('title');
     requestAnimationFrame(this.loop);
+    // precompile unlocked Legends' shaders in the background once the title screen is up
+    setTimeout(() => this.warmLegends(), 2500);
+  }
+
+  private warmLegends() {
+    const ids = LEGENDS.filter((l) => isSkinUnlocked(store.profile, l.id)).map((l) => l.id as CharacterId);
+    if (ids.length) this.renderer.warmCharacters(ids);
   }
 
   // ------------------------------------------------------------------ settings
@@ -263,7 +271,10 @@ export class App implements UIHost {
   }
 
   private dailyBiome(): BiomeId {
-    return BIOMES[hashString(todayKey()) % BIOMES.length].id;
+    // Daily pool = the original worlds (unlocked by level 7) so the daily never bypasses unlocks
+    // and boards from before the expansion stay identical.
+    const pool = BIOMES.filter((b) => b.unlockLevel <= 7);
+    return pool[hashString(todayKey()) % pool.length].id;
   }
 
   pause() {
@@ -409,6 +420,7 @@ export class App implements UIHost {
       if (skin) unlocks.push(`${skin.kind === 'legend' ? 'Legend' : 'Snake'} unlocked: ${skin.name}`);
     }
     store.saveProfile();
+    if (levelAfter > levelBefore || earned.length) this.warmLegends();
 
     const result: RunResult = {
       config: cfg,

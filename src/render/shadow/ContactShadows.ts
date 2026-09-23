@@ -165,6 +165,9 @@ export class ContactShadows {
     this.cam.updateMatrixWorld();
   }
 
+  /** The occluder override material (used to pre-warm shader variants for new objects). */
+  get occluderMaterial() { return this.occMat; }
+
   render(r: THREE.WebGLRenderer, scene: THREE.Scene, exclude: THREE.Object3D[]) {
     r.getClearColor(this.prevClear);
     const prevAlpha = r.getClearAlpha();
