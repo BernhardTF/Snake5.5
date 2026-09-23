@@ -277,7 +277,7 @@ vec2 pattern(vec2 p, vec4 nc) {
   float lip;
   float st = dallolTerr(p, lip);
   float blister = pow(vnoise(p * 1.3 + 3.0), 3.0) * 0.7;
-  return vec2(lip * 0.6 + dallolKnob(p) * 1.3 + blister, st * 2.4);
+  return vec2(lip * 0.6 + dallolKnob(p) * 3.2 + blister * 1.5, st * 2.4);
 }
 #elif BIOME == 8
 // Luna: regolith clods; the crater fields are analytic (height + gradient) in main()
@@ -611,6 +611,11 @@ void main() {
     float ff = 1.0 - smoothstep(0.3, 0.8, 26.0 * fw);
     float speck = step(0.935, fh.z) * (1.0 - smoothstep(0.16, 0.32, length(fc)));
     alb = mix(alb, uColC, speck * ff * 0.85 + (1.0 - ff) * 0.05);
+    // a sparser octave of larger foram tests / red shell bits that stay visible at play zoom
+    vec3 fh2 = hash32(floor(p * 8.0) + 15.0);
+    vec2 fc2 = fract(p * 8.0) - 0.5 - (fh2.xy - 0.5) * 0.5;
+    float speck2 = step(0.965, fh2.z) * (1.0 - smoothstep(0.07, 0.15, length(fc2 * vec2(1.0, 1.0 + fh2.x))));
+    alb = mix(alb, mix(uColC, uColC * 0.6, fh2.y), speck2 * (1.0 - smoothstep(0.3, 0.8, 8.0 * fw)) * 0.9);
     vec3 gh3 = hash32(floor(p * 13.0) + 9.0);
     vec2 gc3 = fract(p * 13.0) - 0.5;
     float grit = step(0.95, gh3.x) * (1.0 - smoothstep(0.1, 0.3, length(gc3 * vec2(1.0, 1.6 + gh3.y))));
@@ -628,9 +633,9 @@ void main() {
     alb *= 1.0 - 0.04 * groove;
     // damp swash zone: darker, deeper pink, glossy (sheen added in the specials)
     float eN = lapEdgeN(p, uWave.x, uTime);
-    float damp = max(smoothstep(-0.7, -0.02, eN), smoothstep(-0.25, 0.2, p.y - uWave.y) * 0.6);
+    float damp = max(smoothstep(-0.7, -0.02, eN), smoothstep(-0.25, 0.2, p.y - uWave.y) * 0.8);
     gWet = damp * (1.0 - wh * 0.5);
-    alb *= mix(vec3(1.0), vec3(0.8, 0.73, 0.74), gWet);
+    alb *= mix(vec3(1.0), vec3(0.72, 0.62, 0.64), gWet);
   }
 #elif BIOME == 6
   {
@@ -1003,10 +1008,10 @@ void main() {
     if (gPool > 0.001) {
       vec3 gp = gnoised(p * 2.4 + vec2(uTime * 0.13, uTime * 0.07));
       vec3 Np = normalize(vec3(-gp.yz * 0.015, 1.0));
-      float od = 0.15 + gPoolD * 2.4;
+      float od = 0.35 + gPoolD * 2.4;
       vec3 absorbA = gPoolType < 0.55 ? vec3(2.8, 0.32, 0.7) : (gPoolType < 0.8 ? vec3(2.6, 0.3, 0.32) : vec3(1.6, 0.2, 2.2));
       vec3 scat = gPoolType < 0.8 ? vec3(0.015, 0.2, 0.15) : vec3(0.08, 0.2, 0.02);
-      vec3 floorC = mix(vec3(0.62, 0.62, 0.22), vec3(0.16, 0.3, 0.12), smoothstep(0.1, 0.8, gPoolD));
+      vec3 floorC = mix(vec3(0.42, 0.46, 0.14), vec3(0.12, 0.24, 0.1), smoothstep(0.05, 0.7, gPoolD));
       vec3 light = uSunColor * L.z + amb;
       vec3 liq = floorC * light * exp(-absorbA * od) + scat * light * (1.0 - exp(-od * 1.6));
       vec3 Rv = reflect(-V, Np);
@@ -1073,7 +1078,7 @@ void main() {
         float rr = length(d);
         float rad = 0.04 + dr.z * 0.28;
         float w = (rr - rad) / 0.035;
-        float amp = exp(-w * w) * (1.0 - dr.z / 2.4) * 0.35;
+        float amp = exp(-w * w) * (1.0 - dr.z / 2.4) * 0.6;
         rg += amp * (-2.0 * w / 0.035) * d / max(rr, 1e-4) * 0.02;
       }
       vec3 Nl = normalize(vec3(-rg, 1.0));
@@ -1081,11 +1086,13 @@ void main() {
       float bands = fbm3(p * vec2(0.05, 0.09) + Rl.xy * 1.5 + vec2(uTime * 0.004, 0.0));
       // sky radiance ~ irradiance / pi; liquid methane reflects ~2-4% of it: much darker than the dunes
       vec3 hz = (uSkyColor * 1.4 + uSunColor * 0.6) * mix(vec3(1.0), uHorizon / max(luma(uHorizon), 1e-3), 0.3);
-      hz *= 0.75 + 0.5 * bands;
+      hz *= 0.45 + 1.1 * smoothstep(0.3, 0.75, bands);
       float depth = smoothstep(0.0, 0.9, lk);
       vec3 bottom = col * exp(-vec3(3.0, 3.6, 4.2) * lk * 1.4);
       vec3 liq = mix(bottom, vec3(0.002, 0.0015, 0.001), depth);
-      liq += hz * 0.045;
+      liq += hz * 0.075;
+      // meniscus: a thin bright line where the liquid meets the shore
+      liq += hz * 0.25 * exp(-sq((lk - 0.03) / 0.03));
       // the hidden sun: a broad soft glint through the haze
       liq += uSunColor * pow(max(dot(Nl, Hh), 0.0), 25.0) * 0.06;
       col = mix(col, liq, smoothstep(-0.06, 0.06, lk));

@@ -83,7 +83,7 @@ void main() {
   float curl = 1.0 - smoothstep(0.0, 0.035, abs(m - 0.24));
   vec3 lit = uSkyCol * 0.6 + uSunCol * 0.6;
   c *= lit * (0.92 + 0.15 * smoothstep(0.0, 0.6, m));
-  c = mix(c, c * vec3(0.55, 0.6, 0.72), max(rim, curl * 0.6));
+  c = mix(c, c * vec3(0.42, 0.55, 0.62), max(rim, curl * 0.7));
 #else
   // ember / hot dot
   a = exp(-r2 * 7.0);

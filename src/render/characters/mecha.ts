@@ -370,7 +370,7 @@ export class MechaView extends LegendBase {
       const sp = r.range(0.8, 3.2) * k * sc;
       const hot = r.next();
       this.sparks.spawn(this.smp.x, this.smp.y, 0.28 * sc, Math.cos(a) * sp, Math.sin(a) * sp, r.range(0.5, 2.6), r.range(0.3, 0.8),
-        0.05 * sc, 0.02 * sc, 5, 2.4 + 1.6 * hot, 0.6 + 1.4 * hot, 1);
+        0.13 * sc, 0.06 * sc, 5, 2.4 + 1.6 * hot, 0.6 + 1.4 * hot, 1);
     }
   }
 

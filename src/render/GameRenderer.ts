@@ -299,6 +299,7 @@ export class GameRenderer implements IGameRenderer {
     this.sim.setResolution(p.simRes, this.renderer);
     if (changed) this.shadows.configure(this.sim.region, p.shadowRes);
     this.post.configure(p.post, p.post && p.bloom && this.opts.bloom, p.post && p.dof && this.opts.dof, p.post && p.grain, p.samples);
+    this.snakeView.setQuality(this.opts.quality);
     this.particles.enabled = this.opts.particles;
     this.particles.multiplier = p.particles;
     this.precompile();
@@ -318,6 +319,12 @@ export class GameRenderer implements IGameRenderer {
       this.frameMesh.material = this.frameMats[b];
       r.compile(this.scene, this.camera);
     }
+    // the glass (crystal) skin uses different programs: compile them too so selecting it doesn't hitch
+    const sv = this.snakeView as unknown as { skin?: SkinId };
+    const prevSkin = sv.skin ?? null;
+    this.snakeView.setSkin('crystal');
+    r.compile(this.scene, this.camera);
+    if (prevSkin) this.snakeView.setSkin(prevSkin);
     r.setRenderTarget(prevTarget);
     this.sandMesh.material = sm; this.frameMesh.material = fm;
     this.sim.compile(r);

@@ -43,7 +43,8 @@ void main() {
   vec3 cA = vec3(0.04, 0.62, 1.0), cB = vec3(0.3, 0.45, 1.0), cC = vec3(0.55, 0.2, 1.0);
   vec3 col = u < 0.35 ? mix(cA, cB, smoothstep(0.0, 0.35, u)) : mix(cB, cC, smoothstep(0.35, 0.85, u));
   vec3 coreCol = mix(vec3(0.85, 1.0, 1.0), vec3(0.85, 0.75, 1.0), smoothstep(0.2, 0.9, u));
-  float I = dust * mix(1.0, 1.35, uDay) * taper * flick;
+  float I = dust * mix(1.0, 0.8, uDay) * taper * flick;
+  col = mix(col, col * col * vec3(0.9, 1.0, 1.1), uDay * 0.75);
   float Ic = core * 0.9 * taper * flick;
   float knot = 0.0;
   for (int i = 0; i < 4; i++) knot += uBul[i].y * exp(-pow((s - uBul[i].x) / 0.38, 2.0));

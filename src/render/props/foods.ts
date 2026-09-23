@@ -515,16 +515,17 @@ function saltCrystals(): THREE.Group {
     cube(s, Math.cos(a) * d, Math.sin(a) * d, s * 0.4, r() * 1.5, (r() - 0.5) * 0.6);
   }
   grp.add(mesh(merge(geos), xm().salt, 'crystal'));
+  // dark iron-salt crust under the cubes: outlines white (and gold) cubes on the bright crust
   const sh = new THREE.Shape();
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const rad = 0.3 * (0.88 + 0.18 * noise3(Math.cos(a) * 1.6, Math.sin(a) * 1.6, 0, 4));
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    const rad = 0.25 * (0.88 + 0.2 * noise3(Math.cos(a) * 1.6, Math.sin(a) * 1.6, 0, 4));
     if (i === 0) sh.moveTo(Math.cos(a) * rad, Math.sin(a) * rad); else sh.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
   }
   const pool = new THREE.ShapeGeometry(sh, 2);
   pool.translate(0, 0, 0.006);
-  colorize(pool, (p) => lerpC(C('#44e6c0'), C('#0c8c78'), smoothstep(0.1, 0.3, Math.hypot(p.x, p.y))));
-  grp.add(mesh(withCol(pool, pool), xm().brine, 'pool'));
+  colorize(pool, (p) => lerpC(C('#5a2408'), C('#a8501a'), smoothstep(0.12, 0.25, Math.hypot(p.x, p.y))));
+  grp.add(mesh(withCol(pool, pool), xm().rockFlat, 'keep'));
   return grp;
 }
 
@@ -682,7 +683,7 @@ function starSeed(): THREE.Group {
 
 /** Worlds with a dark / black sky environment: plain metal reflects almost nothing there, so the
  * golden variant gets extra self-emission to still read (and bloom) as gold. */
-const GOLD_BOOST: Partial<Record<BiomeId, number>> = { luna: 0.9, vaadhoo: 0.55, titan: 0.45, kepler: 0.25, mars: 0.2, dallol: 0.3 };
+const GOLD_BOOST: Partial<Record<BiomeId, number>> = { luna: 0.9, vaadhoo: 0.55, titan: 0.45, kepler: 0.25, mars: 0.2, dallol: 0.7 };
 const _boosted = new Map<number, { gold: THREE.MeshPhysicalMaterial; goldDark: THREE.MeshPhysicalMaterial }>();
 function goldify(src: THREE.Group, crystal: boolean, boost = 0): THREE.Group {
   const M0 = sharedMats();
@@ -706,6 +707,7 @@ function goldify(src: THREE.Group, crystal: boolean, boost = 0): THREE.Group {
     if (role === 'glowN') { drop.push(m); return; }
     if (role === 'glow') { m.material = M.glow; return; }
     if (role === 'glowcore') { m.material = M.goldGlow; return; }
+    if (role === 'keep') return;
     m.material = (role === 'anther' || role === 'center' || role === 'cap' || role === 'rock' || role === 'column' || role === 'pool') ? M.goldDark : M.gold;
     if (crystal && role === 'crystal') m.material = M.gold;
   });
@@ -752,6 +754,9 @@ export function foodModel(b: BiomeId): FoodModel {
     mars: iceCore, titan: tholinBloom, kepler: starSeed,
   };
   const normal = (make[b] ?? kantuta)();
+  // expansion foods: normalise the visual footprint to the classic foods (~0.4 radius)
+  const fit: Partial<Record<BiomeId, number>> = { pinksands: 1.15, vaadhoo: 1.3, dallol: 1.4, luna: 1.35, mars: 1.2, titan: 1.45, kepler: 1.15 };
+  normal.scale.multiplyScalar(fit[b] ?? 1);
   if (b === 'svartsandur') {
     const glow = noShadow(new THREE.Mesh(unitPlane(), new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xff6a20, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0.9 })));
     glow.scale.setScalar(1.1); glow.position.z = 0.015; glow.userData.role = 'glow';

@@ -373,7 +373,7 @@ const xmats = {
   sulphur: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 }),
   brine: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02, metalness: 0 }),
   // Titan's orange haze would turn plain white ice beige: a faint cool self-glow keeps it bluish
-  ice: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, clearcoat: 0.8, clearcoatRoughness: 0.2, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.8, 0.9, 1), emissive: new THREE.Color('#5e8cc8'), emissiveIntensity: 0.32 }),
+  ice: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.26, clearcoat: 0.8, clearcoatRoughness: 0.2, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0.8, 0.9, 1), emissive: new THREE.Color('#5e8cc8'), emissiveIntensity: 0.24 }),
   crystal: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, flatShading: true, emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 1.5 }), 'crystal'),
   fungus: vertexGlow(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.4, sheen: 0.0, sheenColor: new THREE.Color(0.8, 1, 1), emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 2.2 }), 'fungus'),
   hoverGlow: new THREE.MeshBasicMaterial({ color: 0x9a7aff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
@@ -693,7 +693,7 @@ function chimney(seed: number, h: number, r0: number, geos: THREE.BufferGeometry
     p.setXYZ(i, v.x * k, v.y * k, v.z);
   }
   g.computeVertexNormals();
-  const brown = C('#8e4a14'), ochre = C('#c8781e'), acid = C('#e9d21c'), pale = C('#f2f0b4'), green = C('#a8dc5a'), inner = C('#1a8a6a');
+  const brown = C('#7a3a0e'), ochre = C('#c0701a'), acid = C('#e9d21c'), pale = C('#f6f2a8'), green = C('#98d040'), inner = C('#0a6a3a');
   colorize(g, (q) => {
     const t = q.z / h;
     const rr = Math.hypot(q.x, q.y) / r0;
@@ -708,7 +708,7 @@ function chimney(seed: number, h: number, r0: number, geos: THREE.BufferGeometry
   geos.push(g);
   const pool = new THREE.CircleGeometry(r0 * 0.46, 16);
   pool.translate(0, 0, 0.92 * h);
-  pools.push(prep(pool, (q) => lerpC(C('#5ef0c8'), C('#0e9a78'), Math.hypot(q.x, q.y) / (r0 * 0.46))));
+  pools.push(prep(pool, (q) => lerpC(C('#3ad890'), C('#0a7048'), Math.hypot(q.x, q.y) / (r0 * 0.46))));
 }
 function saltPillar(seed: number, h: number, r0: number): THREE.BufferGeometry {
   const r = rng(seed);
@@ -731,7 +731,7 @@ function saltPillar(seed: number, h: number, r0: number): THREE.BufferGeometry {
     p.setXYZ(i, v.x * k, v.y * k, v.z);
   }
   g.computeVertexNormals();
-  const white = C('#f2efe4'), cream = C('#d8c498'), rust = C('#b05a22'), green = C('#9cc878');
+  const white = C('#f4ecdc'), cream = C('#c8a878'), rust = C('#a04a1a'), green = C('#8cb868');
   colorize(g, (q, n) => {
     const t = q.z / h;
     const band = Math.sin(t * 26 + noise3(q.x * 3, q.y * 3, 0, seed) * 3 + o);
@@ -792,7 +792,7 @@ function dallol(seed: number, v: number, big: boolean, rolling: boolean): Obstac
 
 // ------------------------------------------------------------------ luna: ejecta boulders
 function moonRockColor(seed: number) {
-  const base = C('#96938c'), light = C('#c4c0b8'), dark = C('#55534f');
+  const base = C('#7c7a74'), light = C('#aeaba4'), dark = C('#46443f');
   return (g: THREE.BufferGeometry) => {
     const p = g.getAttribute('position'), n = g.getAttribute('normal');
     const col = new Float32Array(p.count * 3);
@@ -833,29 +833,15 @@ function luna(seed: number, v: number, big: boolean, rolling: boolean): Obstacle
     parts.push(g);
   };
   if (big) {
-    // small crater with a raised rim, boulders thrown on it
-    const prof: [number, number][] = ([[0.001, 0.015], [0.4, 0.02], [0.62, 0.1], [0.8, 0.22], [0.9, 0.2], [1.02, 0.08], [1.18, 0.0]] as [number, number][]).reverse();
-    const rim = lathe(prof, 40);
-    const p = rim.getAttribute('position');
-    for (let i = 0; i < p.count; i++) {
-      const a = Math.atan2(p.getY(i), p.getX(i));
-      const z = p.getZ(i);
-      p.setZ(i, z * (1 + 0.35 * (noise3(Math.cos(a) * 2, Math.sin(a) * 2, 0, seed) - 0.5) * 2));
-    }
-    rim.computeVertexNormals();
-    colorize(rim, (q) => {
-      const rr = Math.hypot(q.x, q.y);
-      let c = lerpC(C('#5f5d59'), C('#a8a6a0'), smoothstep(0.35, 0.85, rr));
-      c = lerpC(c, C('#7a7874'), smoothstep(0.9, 1.15, rr));
-      return c.multiplyScalar(0.9 + 0.2 * noise3(q.x * 12, q.y * 12, 0, seed));
-    });
-    parts.push(prep(rim, undefined)); recolor(parts[0], rim);
+    // a heap of ejecta: two or three big angular blocks + chips (no crater ring: the regolith
+    // already has craters and the obstacle must not read as terrain)
+    add(seed, new THREE.Vector3(0.62, 0.52, 0.55), -0.3, 0.25, r() * 6);
+    add(seed + 3, new THREE.Vector3(0.48, 0.4, 0.46), 0.5, -0.35, r() * 6);
+    if (v % 2 === 0) add(seed + 5, new THREE.Vector3(0.34, 0.3, 0.32), 0.45, 0.6, r() * 6);
     for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + r() * 0.8;
-      const s = 0.26 + r() * 0.16;
-      add(seed + k * 5, new THREE.Vector3(s, s * (0.8 + r() * 0.3), s * 0.9), Math.cos(a) * 0.86, Math.sin(a) * 0.86, r() * 6);
+      const a = r() * 6.28, s = 0.08 + r() * 0.08;
+      add(seed + 20 + k, new THREE.Vector3(s, s * 0.9, s * 0.7), Math.cos(a) * 0.95, Math.sin(a) * 0.95, r() * 6, 0);
     }
-    add(seed + 40, new THREE.Vector3(0.18, 0.15, 0.16), 0.1, -0.1, 1);
     const g = merge(parts); fitUnit([g]);
     return { geo: g, mat: mats.rockFlat };
   }
@@ -910,60 +896,22 @@ function ventifact(seed: number): THREE.BufferGeometry {
   g.computeVertexNormals();
   return g;
 }
-function mesa(seed: number): THREE.BufferGeometry {
-  const r = rng(seed);
-  const cols = [C('#4a2216'), C('#7a3a20'), C('#2e1e1a'), C('#8e4a28'), C('#3a221a')];
-  const geos: THREE.BufferGeometry[] = [];
-  let z = 0;
-  const L = 4;
-  const o = r() * 10;
-  for (let l = 0; l < L; l++) {
-    const R = 1 - l * 0.2 - r() * 0.05, th = 0.16 + r() * 0.08;
-    const s = new THREE.Shape();
-    const N = 14;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const rr = R * (0.82 + 0.3 * noise3(Math.cos(a) * 1.5 + o, Math.sin(a) * 1.5, l, seed));
-      const x = Math.cos(a) * rr * 1.12, y = Math.sin(a) * rr * 0.85;
-      if (i === 0) s.moveTo(x, y); else s.lineTo(x, y);
-    }
-    s.closePath();
-    const eg = new THREE.ExtrudeGeometry(s, { depth: th, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.035, bevelSegments: 1 });
-    eg.deleteAttribute('uv');
-    eg.translate(0.1 * l * (r() - 0.5), 0.1 * l * (r() - 0.5), z + 0.03);
-    const ng = eg.index ? eg.toNonIndexed() : eg;
-    ng.deleteAttribute('normal'); ng.computeVertexNormals();
-    const base = cols[(l + seed) % cols.length];
-    colorize(ng, (p, n) => {
-      let c = base.clone().multiplyScalar(0.85 + 0.3 * noise3(p.x * 8, p.y * 8, p.z * 20, seed + l));
-      if (n.z > 0.7) c = l === L - 1 ? lerpC(c, C('#d08a58'), 0.45) : c.multiplyScalar(1.1);
-      else if (n.z > 0.2) c = lerpC(c, C('#e0a070'), 0.5); // bevel rim catches light
-      else c.multiplyScalar(0.6);
-      return c;
-    });
-    geos.push(ng);
-    z += th + 0.03;
-  }
-  return merge(geos);
-}
 function mars(seed: number, v: number, big: boolean, rolling: boolean): ObstacleGeo {
   if (rolling) {
     const g = blob(3, (p) => 1 + (fbm3(p.x * 2, p.y * 2, p.z * 2, seed, 3) - 0.5) * 0.3 + 0.03 * Math.sin(p.y * 14),
       (p) => lerpC(C('#3a3230'), C('#b05228'), smoothstep(0.45, 0.65, fbm3(p.x * 2.5, p.y * 2.5, p.z * 2.5, seed + 1, 3))), new THREE.Vector3(1, 1, 1), -10);
     return { geo: g, mat: mats.rock };
   }
-  if (big || v === 5) {
-    const m = mesa(seed);
-    if (big) {
-      const vf = ventifact(seed + 1); vf.scale(0.5, 0.5, 0.55); vf.translate(0.95, -0.7, 0);
-      fitUnit([m, vf]);
-      return { geo: m, mat: mats.rockFlat, extra: [{ geo: vf, mat: mats.rock }], alignYaw: MARS_WIND };
-    }
-    fitUnit([m]);
-    return { geo: m, mat: mats.rockFlat, alignYaw: MARS_WIND };
+  if (big) {
+    const a = ventifact(seed); a.translate(-0.25, 0.3, 0);
+    const b = ventifact(seed + 1); b.scale(0.55, 0.55, 0.6); b.translate(0.95, -0.55, 0);
+    const c = ventifact(seed + 2); c.scale(0.38, 0.38, 0.4); c.translate(-0.7, -0.85, 0);
+    const g = merge([a, b, c]);
+    fitUnit([g]);
+    return { geo: g, mat: mats.rock, alignYaw: MARS_WIND };
   }
   const g = ventifact(seed);
-  if (v === 2) {
+  if (v === 2 || v === 5) {
     const s = ventifact(seed + 3); s.scale(0.42, 0.42, 0.45); s.translate(0.95, 0.6, 0);
     const m = merge([g, s]); fitUnit([m]); return { geo: m, mat: mats.rock, alignYaw: MARS_WIND };
   }
@@ -1142,8 +1090,8 @@ function hoverGlowMat() {
 function kepler(seed: number, v: number, big: boolean, rolling: boolean): ObstacleGeo {
   if (rolling) return hoverCrystal(seed);
   if (big) {
-    const sp = crystalSpires(seed, 8, 0.7); sp.translate(-0.35, 0.3, 0);
-    const fu = fungusPatch(seed + 1, 3); fu.scale(0.7, 0.7, 0.7); fu.translate(0.75, -0.65, 0);
+    const sp = crystalSpires(seed, 9, 0.75); sp.translate(-0.2, 0.18, 0);
+    const fu = fungusPatch(seed + 1, 3); fu.scale(0.8, 0.8, 0.8); fu.translate(0.62, -0.55, 0);
     fitUnit([sp, fu]);
     return { geo: sp, mat: xmats.crystal, extra: [{ geo: fu, mat: xmats.fungus }] };
   }

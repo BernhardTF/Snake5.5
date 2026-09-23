@@ -178,8 +178,8 @@ export const BIOME_VISUALS: Record<BiomeId, BiomeVisual> = {
   dallol: {
     id: 'dallol', index: 7,
     sunDir: n3(-0.42, 0.46, 0.76),
-    sun: [1.55, 1.52, 1.44],
-    sky: [0.25, 0.27, 0.3],
+    sun: [1.6, 1.56, 1.48],
+    sky: [0.17, 0.19, 0.22],
     ground: [0.3, 0.28, 0.1],
     sandA: '#d8c61e', sandB: '#f4f2e2', sandC: '#c0661f',
     depthScale: 0.12,

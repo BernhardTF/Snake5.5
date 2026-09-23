@@ -2,7 +2,8 @@
 // R = sun-projected shadow (geometry sheared along the sun's ground projection by height)
 // G = ambient occlusion footprint (vertical projection, blurred wider).
 // B = second-sun shadow (twin-sun worlds only, LIGHT.sun2Dir; 0 elsewhere and the pass is skipped).
-// Objects with `userData.noShadow = true` (or invisible) are skipped.
+// Objects with `userData.noShadow = true` (or invisible) are skipped. `userData.shadowOpacity`
+// (0..1, e.g. 0.35 for the glass snake) scales that object's shadow + occlusion.
 import * as THREE from 'three';
 import { LIGHT } from '../lighting';
 import { FullscreenPass, makeRT, passMaterial } from '../fsq';
@@ -28,11 +29,12 @@ void main() {
 `;
 const OCC_FRAG = /* glsl */ `
 uniform float uMode;
+uniform float uOpacity;
 varying float vH;
 void main() {
-  if (uMode < 0.5) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-  else if (uMode > 1.5) gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
-  else gl_FragColor = vec4(0.0, clamp(1.15 - vH * 0.9, 0.0, 1.0), 0.0, 1.0);
+  if (uMode < 0.5) gl_FragColor = vec4(uOpacity, 0.0, 0.0, 1.0);
+  else if (uMode > 1.5) gl_FragColor = vec4(0.0, 0.0, uOpacity, 1.0);
+  else gl_FragColor = vec4(0.0, clamp(1.15 - vH * 0.9, 0.0, 1.0) * uOpacity, 0.0, 1.0);
 }
 `;
 
@@ -99,18 +101,43 @@ export class ContactShadows {
   private hideVisit = (o: THREE.Object3D) => {
     if (o.visible && (o.userData.noShadow || (o as any).isPoints || (o as any).isSprite || (o as any).isLine)) {
       o.visible = false; this.hidden.push(o);
+      return;
+    }
+    const op = o.userData.shadowOpacity;
+    if (typeof op === 'number' && op < 0.999) {
+      // partial shadow: the pass uses one override material, so set its opacity around this draw
+      this.opObjs.push(o);
+      this.opBefore.push(o.onBeforeRender);
+      this.opAfter.push(o.onAfterRender);
+      o.onBeforeRender = this.opSet;
+      o.onAfterRender = this.opReset;
     }
   };
+  private opObjs: THREE.Object3D[] = [];
+  private opBefore: THREE.Object3D['onBeforeRender'][] = [];
+  private opAfter: THREE.Object3D['onAfterRender'][] = [];
+  private opSet: THREE.Object3D['onBeforeRender'];
+  private opReset: THREE.Object3D['onAfterRender'];
 
   constructor() {
     this.occMat = new THREE.ShaderMaterial({
       vertexShader: OCC_VERT, fragmentShader: OCC_FRAG,
-      uniforms: { uSun: LIGHT.sunDir, uSun2: LIGHT.sun2Dir, uMode: { value: 0 } },
+      uniforms: { uSun: LIGHT.sunDir, uSun2: LIGHT.sun2Dir, uMode: { value: 0 }, uOpacity: { value: 1 } },
       blending: THREE.CustomBlending,
       blendEquation: THREE.MaxEquation,
       blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
       depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
+    const occ = this.occMat;
+    // three calls these with `this` = the object being drawn
+    this.opSet = function (this: THREE.Object3D) {
+      occ.uniforms.uOpacity.value = this.userData.shadowOpacity ?? 1;
+      occ.uniformsNeedUpdate = true;
+    };
+    this.opReset = function () {
+      occ.uniforms.uOpacity.value = 1;
+      occ.uniformsNeedUpdate = true;
+    };
     this.blurMat = passMaterial(BLUR3_FRAG, {
       uTex: { value: null }, uDirR: { value: new THREE.Vector2() }, uDirG: { value: new THREE.Vector2() },
     });
@@ -164,6 +191,12 @@ export class ContactShadows {
     scene.background = prevBg;
     r.autoClear = prevAuto;
     for (const o of this.hidden) o.visible = true;
+    for (let i = 0; i < this.opObjs.length; i++) {
+      this.opObjs[i].onBeforeRender = this.opBefore[i];
+      this.opObjs[i].onAfterRender = this.opAfter[i];
+    }
+    this.opObjs.length = 0; this.opBefore.length = 0; this.opAfter.length = 0;
+    this.occMat.uniforms.uOpacity.value = 1;
     // blur (texel units)
     const w = this.rtA.width, h = this.rtA.height;
     const cellsPerTexel = this.region.z / w;

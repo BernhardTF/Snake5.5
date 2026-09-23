@@ -193,6 +193,8 @@ export class DragonView extends LegendBase {
   private tmp = newSample();
   private p3 = { x: 0, y: 0, z: 0 };
   private gait = 0;
+  private amp = 0;
+  private wave = 0;
   private turnLag = 0;
   private cloudAcc = 0;
   private emberAcc = 0;
@@ -244,7 +246,7 @@ export class DragonView extends LegendBase {
         c *= mix(1.0, 0.72, smoothstep(0.82, 1.0, d));
         c += vec3(0.25, 0.18, 0.02) * smoothstep(0.55, 0.7, d) * (1.0 - smoothstep(0.7, 0.85, d)) * 0.35;
         // cream-gold ventral scutes
-        float belly = 1.0 - smoothstep(0.2, 0.32, d);
+        float belly = 1.0 - smoothstep(0.34, 0.42, d);
         float sc = fract(s / 0.085);
         vec3 bc = mix(vec3(0.85, 0.66, 0.3), vec3(0.62, 0.42, 0.14), smoothstep(0.7, 1.0, sc));
         c = mix(c, bc, belly);
@@ -338,7 +340,10 @@ export class DragonView extends LegendBase {
     if (this.eats) this.tongueT = 0;
     this.tongueT += dt;
 
-    // ---------------- body tube
+    // ---------------- body tube (gentle sinuous sway, visual only)
+    const tAmp = alive ? Math.min(0.045, 0.012 + spd * 0.004) * sc : 0;
+    this.amp += (tAmp - this.amp) * damp(2, dt);
+    this.wave += dt * (1.6 + spd * 1.1);
     const sStart = 0.42 * sc;
     tube.layout(tr, sStart, L, 0.04 * sc, 1.2 * sc, 0.06 * sc);
     const n = tube.rings;
@@ -355,6 +360,7 @@ export class DragonView extends LegendBase {
       if (te < 0.08 * sc) w *= Math.sqrt(Math.max(0, te / (0.08 * sc)));
       const h = w * 0.95;
       tube.w[q] = w; tube.h[q] = h; tube.zc[q] = h * 0.62 + 0.004 + 0.02 * sc * (1 - dead) * smooth(0, 0.8, s) * (1 - smooth(L * 0.6, L, s));
+      tube.off[q] = this.amp * smooth(0.9 * sc, 2.2 * sc, s) * Math.sin((s / sc) * 2.7 - this.wave);
     }
     tube.build();
 
@@ -392,14 +398,15 @@ export class DragonView extends LegendBase {
     for (let s = sp0; s < sEnd && ns < MAXSPIKE; s += spStep) {
       if (tr.gapDist(s) < 0.22 * sc) continue;
       const q = tube.ringAt(s);
-      const x = tube.x[q], y = tube.y[q], tx = tube.tx[q], ty = tube.ty[q];
+      const tx = tube.tx[q], ty = tube.ty[q];
+      const x = tube.x[q] - ty * tube.off[q], y = tube.y[q] + tx * tube.off[q];
       const top = tube.zc[q] + tube.h[q];
       const big = (ns & 1) === 0 ? 1 : 0.62;
       const taper = lerp(0.45, 1, smooth(sEnd, L * 0.5, s)) * lerp(0.6, 1, smooth(sp0, sp0 + 0.6 * sc, s));
       const ssz = big * taper * sc;
       const flutter = alive ? 0.06 * Math.sin(this.t * 3 - s * 2) : 0;
-      writeTRS(S, ns, x, y, top - 0.035 * sc, Math.atan2(ty, tx), flutter, 0, 0.17 * ssz, 0.42 * ssz, 0.15 * ssz);
-      setColor(this.spikes, ns, 1, big === 1 ? 0.95 : 0.78, big === 1 ? 0.85 : 0.55);
+      writeTRS(S, ns, x, y, top - 0.035 * sc, Math.atan2(ty, tx), flutter, 0, 0.21 * ssz, 0.55 * ssz, 0.17 * ssz);
+      if (big === 1) setColor(this.spikes, ns, 1, 0.92, 0.8); else setColor(this.spikes, ns, 1.0, 0.28, 0.12);
       ns++;
     }
     commit(this.spikes, ns);
@@ -418,7 +425,8 @@ export class DragonView extends LegendBase {
       if (s > L - 0.3 * sc || tr.gapDist(s) < 0.3 * sc) continue;
       tr.chord(s - 0.15 * sc, s + 0.15 * sc, this.smp, this.tmp);
       const q = tube.ringAt(s);
-      const x = this.smp.x, y = this.smp.y, yaw = Math.atan2(this.smp.ty, this.smp.tx);
+      const yaw = Math.atan2(this.smp.ty, this.smp.tx);
+      const x = this.smp.x - this.smp.ty * tube.off[q], y = this.smp.y + this.smp.tx * tube.off[q];
       const w = tube.w[q], zc = tube.zc[q];
       const lsc = sc * (pair === 0 ? 1 : 0.92);
       for (let side = 0; side < 2; side++) {
@@ -431,7 +439,7 @@ export class DragonView extends LegendBase {
         writeTRS(side === 0 ? LLm : LRm, pair, x + lx, y + ly, zc * 0.95, yaw + sg * (sw + 0.15), 0, sg * lift, lsc, lsc, lsc);
         // paw clouds while paddling
         if (alive && lift < 0.05 && Math.sin(ph) > 0.4 && this.rng.next() < dt * 6) {
-          this.clouds.spawn(x + lx * 1.8, y + ly * 1.8, 0.04 * sc, -c * 0.2, -si * 0.2, 0, 1.2, 0.18 * sc, 0.5 * sc, 1, 0.97, 0.92, 0.45, this.rng.next() * 6, (this.rng.next() - 0.5) * 0.6, 1.4);
+          this.clouds.spawn(x + lx * 1.8, y + ly * 1.8, 0.04 * sc, -c * 0.2, -si * 0.2, 0, 1.4, 0.2 * sc, 0.6 * sc, 1, 0.97, 0.92, 0.85, this.rng.next() * 6, (this.rng.next() - 0.5) * 0.6, 1.4);
         }
       }
       nl = pair + 1;
@@ -463,7 +471,7 @@ export class DragonView extends LegendBase {
     const lat = sg * (w + r.range(0.0, 0.18) * sc);
     const x = this.smp.x - this.smp.ty * lat, y = this.smp.y + this.smp.tx * lat;
     const vx = -this.smp.ty * sg * 0.18 - this.smp.tx * 0.12, vy = this.smp.tx * sg * 0.18 - this.smp.ty * 0.12;
-    this.clouds.spawn(x, y, 0.03 * sc, vx * k, vy * k, 0, r.range(1.6, 2.6), 0.25 * sc, r.range(0.7, 1.05) * sc * k, 1, 0.98, 0.93, 0.5, r.next() * 6.28, (r.next() - 0.5) * 0.5, 1.5);
+    this.clouds.spawn(x, y, 0.03 * sc, vx * k, vy * k, 0, r.range(1.8, 2.8), 0.35 * sc, r.range(0.85, 1.25) * sc * k, 1, 0.98, 0.94, 0.95, r.next() * 6.28, (r.next() - 0.5) * 0.4, 1.5);
   }
 
   private updateWhiskers(hx: number, hy: number, hyaw: number, sc: number, alive: boolean, dt: number) {
@@ -547,7 +555,7 @@ export class DragonView extends LegendBase {
       const s = lerp(s0, s1, (i >> 1) / (NMANE / 2));
       if (tr.gapDist(s) < 0.25 * sc) continue;
       const q = tube.ringAt(s);
-      const x = tube.x[q], y = tube.y[q];
+      const x = tube.x[q] - tube.ty[q] * tube.off[q], y = tube.y[q] + tube.tx[q] * tube.off[q];
       const yaw = Math.atan2(tube.ty[q], tube.tx[q]);
       const w = tube.w[q], top = tube.zc[q] + tube.h[q];
       const sg = (i & 1) === 0 ? 1 : -1;
