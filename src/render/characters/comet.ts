@@ -24,7 +24,7 @@ void main() {
 }
 `;
 const RIB_FRAG = /* glsl */ `
-uniform float uTime, uFade, uDead, uFlare;
+uniform float uTime, uFade, uDead, uFlare, uDay;
 uniform vec4 uBul[4];
 varying vec4 vT;
 varying vec3 vW;
@@ -36,14 +36,14 @@ void main() {
   float fil = lvn(vec2(s * 5.0 - uTime * 7.5, v * 8.0 + 3.0));
   float str = lvn(vec2(s * 0.8 - uTime * 1.1, v * 14.0));        // long striations
   float spread = 1.0 + uDead * 1.5;
-  float dust = exp(-av * av * 1.6 / spread) * (0.4 + 0.8 * flow) * (0.7 + 0.6 * str) * smoothstep(1.0, 0.75, av);
+  float dust = exp(-av * av * 1.6 / spread) * (0.4 + 0.8 * flow) * (0.7 + 0.6 * str) * (1.0 - smoothstep(0.75, 1.0, av));
   float core = exp(-av * av * 45.0 / spread) * (0.7 + 0.6 * fil);
-  float taper = pow(clamp(1.0 - u, 0.0, 1.0), 0.9) * smoothstep(0.0, 0.08, s);
+  float taper = pow(clamp(1.0 - u, 0.0, 1.0), 0.55) * smoothstep(0.0, 0.08, s);
   float flick = 0.86 + 0.14 * sin(uTime * 19.0 + s * 4.0) * sin(uTime * 7.3 - s * 2.1);
-  vec3 cA = vec3(0.04, 0.62, 1.0), cB = vec3(0.3, 0.45, 1.0), cC = vec3(0.4, 0.08, 0.95);
+  vec3 cA = vec3(0.04, 0.62, 1.0), cB = vec3(0.3, 0.45, 1.0), cC = vec3(0.55, 0.2, 1.0);
   vec3 col = u < 0.35 ? mix(cA, cB, smoothstep(0.0, 0.35, u)) : mix(cB, cC, smoothstep(0.35, 0.85, u));
   vec3 coreCol = mix(vec3(0.85, 1.0, 1.0), vec3(0.85, 0.75, 1.0), smoothstep(0.2, 0.9, u));
-  float I = dust * 0.85 * taper * flick;
+  float I = dust * mix(1.0, 1.35, uDay) * taper * flick;
   float Ic = core * 0.9 * taper * flick;
   float knot = 0.0;
   for (int i = 0; i < 4; i++) knot += uBul[i].y * exp(-pow((s - uBul[i].x) / 0.38, 2.0));
@@ -51,7 +51,7 @@ void main() {
   I *= 1.0 + uFlare * 0.8 * exp(-s * 0.7);
   I *= 1.0 - uDead;
   vec3 rgb = col * I + coreCol * Ic * (1.0 - uDead) * (1.0 + uFlare) + vec3(0.9, 1.0, 1.0) * knot * 0.6;
-  float a = clamp((dust * 0.8 + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.88);
+  float a = clamp((dust * mix(0.8, 0.95, uDay) + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.92);
   gl_FragColor = vec4(rgb * uFade, a * uFade);
 }
 `;
@@ -110,7 +110,7 @@ export class CometView extends LegendBase {
     this.ribGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
     this.ribMat = new THREE.ShaderMaterial({
       vertexShader: RIB_VERT, fragmentShader: RIB_FRAG,
-      uniforms: { uTime: { value: 0 }, uFade: { value: 1 }, uDead: { value: 0 }, uFlare: { value: 0 }, uBul: { value: this.bul } },
+      uniforms: { uTime: { value: 0 }, uFade: { value: 1 }, uDead: { value: 0 }, uFlare: { value: 0 }, uDay: { value: 0 }, uBul: { value: this.bul } },
       transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendEquation: THREE.AddEquation,
     });
@@ -159,7 +159,7 @@ export class CometView extends LegendBase {
     if (this.justDied) this.flare = 1.6;
     this.flare *= Math.exp(-dt * 3);
     const u = this.ribMat.uniforms;
-    u.uTime.value = this.t; u.uFade.value = fade; u.uDead.value = deadK; u.uFlare.value = this.flare;
+    u.uTime.value = this.t; u.uFade.value = fade; u.uDay.value = clamp((1.2 - night) / 0.9, 0, 1); u.uDead.value = deadK; u.uFlare.value = this.flare;
     for (let i = 0; i < 4; i++) {
       const b = sn.bulges[i];
       this.bul[i].set(b ? b.s : -99, b ? clamp(b.amount, 0, 1) : 0, 0, 0);

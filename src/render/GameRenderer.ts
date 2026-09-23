@@ -39,7 +39,7 @@ const PAT_AMP: Record<BiomeId, number> = {
 };
 const FRAME_H: Record<BiomeId, number> = {
   karesansui: 0.32, erg: 0.36, lagoon: 0.3, svartsandur: 0.42, salar: 0.14,
-  pinksands: 0.28, vaadhoo: 0.3, dallol: 0.3, luna: 0.34, mars: 0.36, titan: 0.3, kepler: 0.34,
+  pinksands: 0.28, vaadhoo: 0.3, dallol: 0.3, luna: 0.0, mars: 0.36, titan: 0.3, kepler: 0.34,
 };
 
 const AURORA = [new THREE.Color(0.1, 0.95, 0.5), new THREE.Color(0.05, 0.75, 0.85), new THREE.Color(0.55, 0.2, 0.95)];

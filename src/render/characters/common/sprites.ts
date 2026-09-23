@@ -60,7 +60,7 @@ void main() {
 #elif MODE == 2
   // spark streak along +x
   float ax = abs(uv.x);
-  a = exp(-uv.y * uv.y * 9.0) * (1.0 - ax * ax) * (0.6 + 0.4 * smoothstep(1.0, -1.0, uv.x));
+  a = exp(-uv.y * uv.y * 9.0) * (1.0 - ax * ax) * (0.6 + 0.4 * (1.0 - smoothstep(-1.0, 1.0, uv.x)));
   c *= 1.0 + 1.5 * exp(-uv.y * uv.y * 60.0);
 #elif MODE == 3
   // 4-point twinkle star

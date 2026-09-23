@@ -234,6 +234,8 @@ export class DragonView extends LegendBase {
           }
         }
         float e = clamp(length(bq * vec2(1.0, 0.9)) / 0.72, 0.0, 1.0);
+        float aa = clamp(1.6 - max(fwidth(p.x), fwidth(p.y)) * 2.2, 0.0, 1.0);
+        e = mix(0.55, e, aa);
         vec3 jade = vec3(0.008, 0.15, 0.065), jadeL = vec3(0.05, 0.42, 0.2), jadeD = vec3(0.002, 0.035, 0.018);
         float n = lvn(vec2(s * 3.0, a * 9.0));
         vec3 c = mix(jadeL, jade, smoothstep(0.0, 0.75, e) * 0.8 + 0.2 * n);

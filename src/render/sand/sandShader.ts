@@ -764,7 +764,9 @@ void main() {
   float inside = min(min(ps.x, uBoard.x - ps.x), min(ps.y, uBoard.y - ps.y));
   sunVis *= smoothstep(-0.06, 0.1, inside);
   float edge = min(min(p.x, uBoard.x - p.x), min(p.y, uBoard.y - p.y));
+#if BIOME != 8
   ao *= mix(0.55, 1.0, smoothstep(0.0, 0.6, edge));
+#endif
   // foliage cookie
   vec2 cuv = (p - uCookieRegion.xy) / uCookieRegion.zw;
   float gust = 0.6 + 0.4 * sin(uTime * 0.23);

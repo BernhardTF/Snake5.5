@@ -335,9 +335,9 @@ void snakeSurface() {
     float fy2 = fract(t + 0.5) - 0.5;   // 0 = waist of a dark hourglass
     float wob = (n - 0.5) * 0.06;
     // dark hourglass: narrow waist on the spine, bulbs spreading down both flanks
-    float dH = max(abs(fy2) - (0.07 + 0.72 * alat), alat - 0.46) + wob;
+    float dH = max(abs(fy2) - (0.12 + 0.8 * alat), alat - 0.46) + wob;
     // buff rectangle on the spine between hourglasses
-    float dR = max(alat - 0.11 - 0.03 * (1.0 - abs(fy) * 2.5), abs(fy) - 0.31) + wob * 0.6;
+    float dR = max(alat - 0.1 - 0.035 * (1.0 - abs(fy) * 3.0), abs(fy) - 0.25) + wob * 0.6;
     // dark flank triangles pointing up, under each rectangle
     float tri = (alat - 0.44) / 0.3;
     float dT = max(abs(fy) - 0.44 * tri, max(-tri * 0.25, alat - 0.8)) + wob;

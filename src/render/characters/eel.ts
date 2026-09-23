@@ -29,7 +29,7 @@ export class EelView extends LegendBase {
   private fin: THREE.Mesh;
   private eyes: THREE.InstancedMesh;
   private eyeMat: THREE.MeshBasicMaterial;
-  private bolts = new BoltBatch(MAXB * NP * 2 + 64, '#f4ffff', '#35d8ff', 7, 2.6);
+  private bolts = new BoltBatch(MAXB * NP * 2 + 64, '#f4ffff', '#2ad4ff', 9, 3.4);
   private glow = new SpriteBatch(96, { mode: SpriteMode.Soft, additive: true, renderOrder: 3 });
   private rng = new Rng(77);
   // bolt state (body coordinates: s along the path, lateral offset, z)
@@ -77,7 +77,7 @@ export class EelView extends LegendBase {
         float rowsH = (abs(d - 0.75) < 0.12 && head > 0.0) ? 1.0 : 0.0;
         vec2 g = vec2(s / mix(0.085, 0.045, head), d * 14.0);
         vec2 f = fract(g) - 0.5;
-        float dot1 = smoothstep(0.26, 0.12, length(f * vec2(1.0, 1.3))) * max(rows, rowsH);
+        float dot1 = (1.0 - smoothstep(0.12, 0.26, length(f * vec2(1.0, 1.3)))) * max(rows, rowsH);
         c = mix(c, vec3(0.8, 0.72, 0.42), dot1 * 0.7);
         // mouth crease + pale lip at the blunt snout
         float sn = s - vInfo.y;
@@ -321,11 +321,11 @@ export class EelView extends LegendBase {
       this.bLife[b] = r.range(0.1, 0.24);
     } else {
       // crawl along the back
-      const len = r.range(0.35, 1.3) * sc;
+      const len = r.range(0.5, 1.6) * sc;
       const s = r.range(0.05 * sc, Math.max(0.1 * sc, L - len * 0.5));
       this.bS0[b] = s; this.bS1[b] = Math.min(L, s + len);
       this.bL0[b] = r.range(-0.7, 0.7); this.bL1[b] = r.range(-0.7, 0.7);
-      this.bLife[b] = r.range(0.08, 0.26);
+      this.bLife[b] = r.range(0.12, 0.34);
     }
     this.bRe[b] = 0;
   }
@@ -404,7 +404,7 @@ export class EelView extends LegendBase {
         bolts.point(x, y, z);
         if (i === (NP >> 1)) { mx = x; my = y; }
       }
-      bolts.flush(0.016 * sc, 0.13 * sc, I);
+      bolts.flush(0.02 * sc, 0.17 * sc, I);
       glow.push(mx, my, 0.012, 1.1 * sc, 1.1 * sc, 0, CYAN.r, CYAN.g, CYAN.b, 0.32 * I);
     }
     // sand glow along the body during a flash

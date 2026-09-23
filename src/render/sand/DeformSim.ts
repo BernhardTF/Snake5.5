@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { BiomeId, RenderFrame } from '../../types';
 import { BIOME_COUNT, BIOME_VISUALS, type BiomeVisual } from '../biomeVisuals';
 import { WORLDS_GLSL } from '../glsl/worlds';
-import { dustDevilPosInto, type DustDevilPos } from '../particles/dustDevils';
+import { dustDevilPosInto, dustDevilStrength, type DustDevilPos } from '../particles/dustDevils';
 import { FullscreenPass, makeRT, passMaterial } from '../fsq';
 import { NOISE_GLSL } from '../glsl/noise';
 
@@ -539,7 +539,7 @@ export class DeformSim {
     for (let i = 0; i < 2; i++) {
       if (!on) { this.devils[i].set(-100, -100, 0, 0); continue; }
       const d = dustDevilPosInto(this.devilTmp, time, i, this.boardW, this.boardH);
-      this.devils[i].set(d.x, d.y, d.r, 1);
+      this.devils[i].set(d.x, d.y, d.r, dustDevilStrength(time, i));
     }
   }
 
