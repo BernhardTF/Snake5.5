@@ -50,9 +50,10 @@ void main() {
   for (int i = 0; i < 4; i++) knot += uBul[i].y * exp(-pow((s - uBul[i].x) / 0.38, 2.0));
   I += knot * 2.6 * exp(-av * av * 5.0);
   I *= 1.0 + uFlare * 0.8 * exp(-s * 0.7);
-  I *= 1.0 - uDead;
+  I *= 1.0 - 0.9 * uDead;
+  col = mix(col, vec3(0.35, 0.33, 0.42), uDead);
   vec3 rgb = col * I + coreCol * Ic * (1.0 - uDead) * (1.0 + uFlare) + vec3(0.9, 1.0, 1.0) * knot * 0.6;
-  float a = clamp((pow(dust, 1.6) * mix(0.8, 0.95, uDay) + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.92);
+  float a = clamp((pow(dust, 1.6) * mix(0.8, 0.95, uDay) + core * 0.3) * taper * (1.0 - 0.85 * uDead), 0.0, 0.92);
   gl_FragColor = vec4(rgb * uFade, a * uFade);
 }
 `;
