@@ -1114,7 +1114,7 @@ void main() {
       vec3 sc = mix(MAG, CYA, step(0.7, sv.y));
       float facet = 0.5 + 0.5 * sin(atan(sv.x - 0.2, sv.z) * 4.0 + sv.y * 20.0); // split facets
       float flick = 0.7 + 0.3 * sin(uTime * (2.0 + sv.y * 5.0) + sv.y * 40.0);
-      float g = gl * gl;
+      float g = smoothstep(0.0, 0.7, gl);
       col = mix(col, col * 0.35 + sc * 0.02, body * g);         // the shard itself is dark glass...
       col += sc * g * flick * (body * (0.7 + 2.2 * facet * (1.0 - sv.z)) + halo * 0.35); // ...lit from inside
       // a soft coloured under-glow in the groove

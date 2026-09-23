@@ -37,19 +37,21 @@ void main() {
   float str = lvn(vec2(s * 0.8 - uTime * 1.1, v * 14.0));        // long striations
   float spread = 1.0 + uDead * 1.5;
   float dust = exp(-av * av * 1.6 / spread) * (0.4 + 0.8 * flow) * (0.7 + 0.6 * str) * smoothstep(1.0, 0.75, av);
-  float core = exp(-av * av * 30.0 / spread) * (0.75 + 0.5 * fil);
+  float core = exp(-av * av * 45.0 / spread) * (0.7 + 0.6 * fil);
   float taper = pow(clamp(1.0 - u, 0.0, 1.0), 0.9) * smoothstep(0.0, 0.08, s);
   float flick = 0.86 + 0.14 * sin(uTime * 19.0 + s * 4.0) * sin(uTime * 7.3 - s * 2.1);
-  vec3 cA = vec3(0.05, 0.7, 1.0), cB = vec3(0.75, 0.85, 1.0), cC = vec3(0.42, 0.12, 1.0);
-  vec3 col = u < 0.4 ? mix(cA, cB, smoothstep(0.0, 0.4, u)) : mix(cB, cC, smoothstep(0.4, 0.9, u));
-  float I = (dust * 1.1 + core * 1.3) * taper * flick;
+  vec3 cA = vec3(0.04, 0.62, 1.0), cB = vec3(0.3, 0.45, 1.0), cC = vec3(0.4, 0.08, 0.95);
+  vec3 col = u < 0.35 ? mix(cA, cB, smoothstep(0.0, 0.35, u)) : mix(cB, cC, smoothstep(0.35, 0.85, u));
+  vec3 coreCol = mix(vec3(0.85, 1.0, 1.0), vec3(0.85, 0.75, 1.0), smoothstep(0.2, 0.9, u));
+  float I = dust * 0.85 * taper * flick;
+  float Ic = core * 0.9 * taper * flick;
   float knot = 0.0;
   for (int i = 0; i < 4; i++) knot += uBul[i].y * exp(-pow((s - uBul[i].x) / 0.38, 2.0));
   I += knot * 2.6 * exp(-av * av * 5.0);
   I *= 1.0 + uFlare * 0.8 * exp(-s * 0.7);
   I *= 1.0 - uDead;
-  vec3 rgb = col * I + vec3(1.0) * core * taper * 0.35 * (1.0 - uDead) + vec3(0.9, 1.0, 1.0) * knot * 0.6;
-  float a = clamp((dust * 0.75 + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.85);
+  vec3 rgb = col * I + coreCol * Ic * (1.0 - uDead) * (1.0 + uFlare) + vec3(0.9, 1.0, 1.0) * knot * 0.6;
+  float a = clamp((dust * 0.8 + core * 0.3) * taper * (1.0 - uDead), 0.0, 0.88);
   gl_FragColor = vec4(rgb * uFade, a * uFade);
 }
 `;
