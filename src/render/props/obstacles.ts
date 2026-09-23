@@ -569,10 +569,10 @@ function branchSweep(p0: THREE.Vector3, dir: THREE.Vector3, len: number, r0: num
   geos.push(prep(cap, C('#b8b0a0')));
 }
 /** Bleached driftwood log. kind 0 straight+stubs, 1 root ball, 2 forked. Along x, on the sand. */
-function driftwood(seed: number, kind: number): THREE.BufferGeometry {
+function driftwood(seed: number, kind: number, thick = 1): THREE.BufferGeometry {
   const r = rng(seed);
   const geos: THREE.BufferGeometry[] = [];
-  const R = 0.36 + r() * 0.06, bend = (r() - 0.5) * 0.45;
+  const R = (0.36 + r() * 0.06) * thick, bend = (r() - 0.5) * 0.45;
   const pts: THREE.Vector3[] = [], rr: number[] = [];
   const n = 14;
   for (let i = 0; i <= n; i++) {
@@ -659,7 +659,7 @@ function vaadhoo(seed: number, v: number, big: boolean, rolling: boolean): Obsta
     const r1 = coralRock(seed); r1.scale(0.7, 0.7, 0.8); r1.translate(-0.35, 0.3, 0);
     const r2 = coralRock(seed + 1); r2.scale(0.5, 0.5, 0.6); r2.translate(0.55, -0.45, 0);
     const rock = merge([r1, r2]);
-    const wood = driftwood(seed + 2, 1); wood.rotateZ(-0.6); wood.scale(0.95, 0.95, 0.95); wood.translate(0.1, 0.05, 0.15);
+    const wood = driftwood(seed + 2, 2, 0.62); wood.rotateZ(-0.6); wood.scale(1.05, 1.05, 1.05); wood.translate(0.0, 0.05, 0.12);
     fitUnit([rock, wood], 1);
     return { geo: rock, mat: xmats.reef, extra: [{ geo: wood, mat: xmats.wood }] };
   }

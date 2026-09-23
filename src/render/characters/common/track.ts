@@ -151,6 +151,16 @@ export class PathTrack {
     return Math.sqrt(Math.max(0, 1 - t * t));
   }
 
+  /** Clamp a step s → ns so it lands exactly on both edges of any wrap jump it would cross. */
+  stepCuts(s: number, ns: number): number {
+    for (let c = 0; c < this.nCuts; c++) {
+      const a = this.cuts[c] - this.sp * 0.5 - 0.004, b = this.cuts[c] + this.sp * 0.5 + 0.004;
+      if (s < a && ns > a) return a;
+      if (s >= a && s < b && ns > b) return b;
+    }
+    return ns;
+  }
+
   /** True when [s0, s1] straddles a wrap cut. */
   crossesGap(s0: number, s1: number): boolean {
     for (let c = 0; c < this.nCuts; c++) { const q = this.cuts[c]; if (q > s0 && q < s1) return true; }

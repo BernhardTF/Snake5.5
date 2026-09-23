@@ -178,7 +178,7 @@ export class CometView extends LegendBase {
     const gStep = Math.max(0.45 * sc, L / 220);
     let nextG = 0.3 * sc;
     const wob = alive ? 1 : 1 + deadK;
-    for (let s = s0; n < MAXR; s += ds) {
+    for (let s = s0; n < MAXR; s = tr.stepCuts(s, s + ds)) {
       const sc2 = Math.min(s, L);
       tr.sample(sc2, o);
       const uu = sc2 / Math.max(0.01, L);

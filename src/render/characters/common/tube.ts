@@ -87,8 +87,11 @@ export class Tube {
       if (s >= s1) break;
       const d = s - s0;
       const ds = d < fineLen ? dsFine : d < fineLen + 0.5 ? dsFine + (dsBody - dsFine) * (d - fineLen) / 0.5 : dsBody;
-      s = Math.min(s1, s + ds);
-      if (s1 - s < ds * 0.3) s = s1;
+      let ns = Math.min(s1, s + ds);
+      if (s1 - ns < ds * 0.3) ns = s1;
+      // never step across a wrap cut: land exactly on both edges of the jump so the collapsed
+      // (zero-width) rings bracket it and no strip can bridge the board
+      s = track.stepCuts(s, ns);
     }
     this.rings = n;
     const o = this.smp;
