@@ -93,11 +93,11 @@ function tenderGeo() {
   const coal = ellipsoid(0.34, 0.26, 0.09, 0.02, 0, 0.4, 20, 10);
   const p = coal.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
-    const n = hash1(i * 7.1) * 0.025;
+    const n = (hash1(i * 7.1) - 0.3) * 0.05;
     p.setZ(i, Math.max(0.39, p.getZ(i) + n));
   }
   coal.computeVertexNormals();
-  return { body: merge(P), coal: merge([paint(coal, '#1a1a1c')]) };
+  return { body: merge(P), coal: merge([paint(coal.toNonIndexed(), '#2c2b2a')]) };
 }
 
 function carriageGeo() {
@@ -213,7 +213,7 @@ export class TrainView extends LegendBase {
     this.brass = new THREE.Mesh(brassGeo(), brassMat);
     const tg = tenderGeo();
     this.tender = new THREE.Mesh(tg.body, paintMat);
-    const coalMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.2 });
+    const coalMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.05, flatShading: true });
     this.tender.add(new THREE.Mesh(tg.coal, coalMat));
     this.solids.push(coalMat);
     this.lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2c8').multiplyScalar(5), toneMapped: false });
