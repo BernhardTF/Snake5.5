@@ -338,6 +338,13 @@ export class TrainView extends LegendBase {
     if (!alive && td < 2.5 && r.next() < dt * 10 * (1 - td / 2.5)) {
       this.steam.spawn(x + r.range(-0.3, 0.3), y + r.range(-0.3, 0.3), 0.25 * sc, r.range(-0.3, 0.3), r.range(-0.3, 0.3), 0.8, 1.2, 0.15 * sc, 0.6 * sc, 1, 1, 1, 0.45, r.next() * 6, 0.3);
     }
+    // cylinder cocks hiss little steam jets when food is near
+    if (alive && r.next() < dt * 6 * sn.interest) {
+      const sg = r.sign();
+      basisYPR(lYaw, 0, lRoll);
+      basisApply(x, y, lift, 0.5 * sc, sg * 0.3 * sc, 0.12 * sc, this.p3);
+      this.steam.spawn(this.p3.x, this.p3.y, this.p3.z, -syaw * sg * 0.9 + cyaw * 0.2, cyaw * sg * 0.9 + syaw * 0.2, 0.2, r.range(0.35, 0.6), 0.05 * sc, 0.28 * sc, 1, 1, 1, 0.55, r.next() * 6, 0.5);
+    }
     if (lampOn > 0.02) {
       const lx = x + cyaw * 1.25 * sc, ly = y + syaw * 1.25 * sc;
       glow.push(lx, ly, 0.012, 1.4 * sc, 0.75 * sc, lYaw, WARM.r, WARM.g * 0.95, WARM.b * 0.8, 0.3 * lampOn);
@@ -374,6 +381,8 @@ export class TrainView extends LegendBase {
     const target = avail > 0.9 * sc ? Math.max(1, Math.round(avail / (2.0 * sc))) : 0;
     this.nVis += (target - this.nVis) * damp(alive ? 3 : 0, dt);
     if (Math.abs(target - this.nVis) < 0.002) this.nVis = target;
+    // keep carriages between ~1.6 and ~2.4 cells even while the count is still easing
+    if (target > 0) this.nVis = clamp(this.nVis, avail / (2.4 * sc), Math.max(1, avail / (1.6 * sc)));
     if (this.nVis > MAXCAR) this.nVis = MAXCAR;
     const nCar = Math.min(MAXCAR, Math.ceil(this.nVis - 1e-3));
     const pitch = avail / Math.max(1, this.nVis);
@@ -399,7 +408,7 @@ export class TrainView extends LegendBase {
       // warm windows flicker gently, glow brighter as a meal passes through
       const on = alive ? 1 : Math.max(0, 1 - smooth(0.3 + i * 0.05, 1.2 + i * 0.05, td));
       const fl = 0.85 + 0.15 * Math.sin(this.t * (3 + this.flick[i] * 5) + i * 1.7);
-      const I = (1.5 * fl + 2.5 * Math.min(1, b)) * on * this.glowFade * app;
+      const I = (1.5 * fl + 1.1 * Math.min(1, b)) * on * this.glowFade * app;
       setColor(this.wins, i, WARM.r * I + 0.03, WARM.g * I + 0.025, WARM.b * I + 0.02);
       if (i % winStep === 0 && I > 0.05) {
         const c = Math.cos(cYaw), s = Math.sin(cYaw);

@@ -97,6 +97,10 @@ export class EelView extends LegendBase {
           float pulse = exp(-pow((s - uPulse) / 0.75, 2.0));
           float crack = uCrack * (0.5 + 0.5 * sin(uT * 37.0 + s * 9.0)) * lvn(vec2(s * 4.0 - uT * 6.0, uT * 3.0));
           float e = band * (st * (uFlash * (0.15 + 2.4 * pulse) + crack * 0.5) + uFlash * pulse * 0.6);
+          // steady bioluminescent lateral line with slow travelling pulses
+          float line = exp(-pow((d - 0.47) / 0.028, 2.0));
+          float trav = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(s * 3.2 - uT * 5.0), 6.0);
+          e += line * (0.28 + 0.9 * uCrack * trav) * smoothstep(0.1, 0.5, s);
           totalEmissiveRadiance = vec3(0.3, 0.95, 1.0) * e * (1.0 - uDead);
         }
       `,

@@ -679,8 +679,10 @@ void main() {
     vec3 cr = voronoi(p * 3.6 + 1.7, 0.9);
     gCrack = cr;
     float Gd = smoothstep(0.1, 0.6, G);
-    vec3 iron = mix(uColC, vec3(0.55, 0.13, 0.02), cr.y * 0.7) * (0.8 + 0.4 * cr.z);
-    alb = mix(alb, iron, Gd * 0.88);
+    // iron salts: ochre to rust-brown per plate, with pale salt dusting (older, darker plates vary)
+    vec3 iron = mix(uColC * 0.85, vec3(0.36, 0.1, 0.02), cr.y) * (0.7 + 0.45 * cr.z);
+    iron = mix(iron, uColA * 0.8, step(0.82, fract(cr.y * 7.7)) * 0.6);
+    alb = mix(alb, iron, Gd * 0.8);
     float crack = (1.0 - smoothstep(0.012, 0.05, cr.x)) * Gd;
     alb = mix(alb, vec3(0.1, 0.03, 0.008), crack * 0.85);
     // brine pools: bright salt rim around the pocket
@@ -985,7 +987,7 @@ void main() {
     float df = 1.0 - smoothstep(0.3, 0.9, 17.0 * fw);
     float flick = 0.55 + 0.45 * sin(uTime * (2.5 + ph.x * 5.0) + ph.y * 30.0);
     float patchy = 0.35 + 0.65 * smoothstep(0.25, 0.75, vnoise(p * 2.3 + 7.0));
-    float em = gl * (0.13 * patchy + (dotm * 3.0 * flick) * df + (1.0 - df) * 0.5);
+    float em = gl * (0.13 * patchy + (dotm * 3.0 * flick) * df + (1.0 - df) * 0.3);
     // sparkles in the moving water near the edge
     vec3 wh = hash32(floor(p * 11.0 + vec2(0.0, uTime * 0.6)) + 3.0);
     vec2 wc = fract(p * 11.0 + vec2(0.0, uTime * 0.6)) - 0.5;
@@ -1090,9 +1092,9 @@ void main() {
       float depth = smoothstep(0.0, 0.9, lk);
       vec3 bottom = col * exp(-vec3(3.0, 3.6, 4.2) * lk * 1.4);
       vec3 liq = mix(bottom, vec3(0.002, 0.0015, 0.001), depth);
-      liq += hz * 0.075;
+      liq += hz * 0.028;
       // meniscus: a thin bright line where the liquid meets the shore
-      liq += hz * 0.25 * exp(-sq((lk - 0.03) / 0.03));
+      liq += hz * 0.12 * exp(-sq((lk - 0.03) / 0.03));
       // the hidden sun: a broad soft glint through the haze
       liq += uSunColor * pow(max(dot(Nl, Hh), 0.0), 25.0) * 0.06;
       col = mix(col, liq, smoothstep(-0.06, 0.06, lk));

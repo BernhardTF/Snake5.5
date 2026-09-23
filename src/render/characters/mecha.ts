@@ -40,7 +40,18 @@ function shellGeo(): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
-  return g;
+  // raised chevron armour plate on top (points toward the head) + side skirts
+  const ch = new THREE.Shape();
+  ch.moveTo(0.46, 0); ch.lineTo(0.08, 0.3); ch.lineTo(-0.36, 0.3); ch.lineTo(0.0, 0.06); ch.lineTo(0.0, -0.06); ch.lineTo(-0.36, -0.3); ch.lineTo(0.08, -0.3); ch.closePath();
+  const plate = new THREE.ExtrudeGeometry(ch, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 });
+  plate.translate(-0.02, 0, 0.88);
+  const skirts = [];
+  for (const sg of [1, -1]) {
+    const sk = new THREE.BoxGeometry(0.7, 0.05, 0.22);
+    sk.translate(0, sg * 0.49, 0.22);
+    skirts.push(paint(sk, '#6a7078'));
+  }
+  return merge([paint(g, '#ffffff'), paint(plate, '#5a6068'), ...skirts]);
 }
 
 function headGeo() {
@@ -123,7 +134,7 @@ export class MechaView extends LegendBase {
     this.smoothLen = 0.2;
     const u = this.uShell;
     const shellMat = patch(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, metalness: 0.8, roughness: 0.38, clearcoat: 0.2, clearcoatRoughness: 0.4, emissive: 0xffffff,
+      color: 0xffffff, vertexColors: true, metalness: 0.8, roughness: 0.38, clearcoat: 0.2, clearcoatRoughness: 0.4, emissive: 0xffffff,
     }), {
       uniforms: u,
       fragDecl: `uniform float uGhost, uT, uPower;\n${NOISE}`,
@@ -135,8 +146,7 @@ export class MechaView extends LegendBase {
           vec3 ti = vec3(0.46, 0.5, 0.55) * (0.86 + 0.24 * br);
           float groove = max(exp(-pow((abs(p.y) - 0.3) / 0.012, 2.0)), exp(-pow((abs(p.x) - 0.3) / 0.012, 2.0)) * step(0.8, p.z));
           ti *= 1.0 - 0.55 * groove;
-          float spine = step(abs(p.y), 0.13) * step(0.85, p.z);
-          ti = mix(ti, vec3(0.12, 0.13, 0.15), spine * 0.85);
+
           // hazard chevrons on the side skirts
           float chev = step(0.9, fract((p.x + abs(p.y) * 0.6) * 5.0)) * step(p.z, 0.3) * step(0.4, abs(p.y));
           ti = mix(ti, vec3(0.6, 0.45, 0.05), chev * 0.6);
@@ -150,7 +160,7 @@ export class MechaView extends LegendBase {
           totalEmissiveRadiance = vec3(0.1, 0.55, 0.75) * uGhost * (0.25 + 0.5 * scan);
           // tiny status LEDs along the spine plate
           vec2 q = vec2(fract(vLoc.x * 2.0 + 0.5) - 0.5, abs(vLoc.y) - 0.1);
-          float led = step(length(q * vec2(1.0, 3.0)), 0.06) * step(0.9, vLoc.z);
+          float led = step(length(q * vec2(1.0, 3.0)), 0.06) * step(0.96, vLoc.z) * step(abs(vLoc.y), 0.2);
           totalEmissiveRadiance += vec3(0.2, 1.4, 1.8) * led * uPower * (0.6 + 0.4 * sin(uT * 4.0 + vWPos.x * 3.0));
         }
       `,

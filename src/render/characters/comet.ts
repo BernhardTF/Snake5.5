@@ -270,7 +270,7 @@ export class CometView extends LegendBase {
       this.stars.spawn(o.x - o.ty * lat, o.y + o.tx * lat, 0.2 * sc, -o.ty * lat * 0.4, o.tx * lat * 0.4, 0, r.range(0.35, 0.9),
         r.range(0.1, 0.2) * sc, 0.02 * sc, violet ? 1.1 : 1.3, violet ? 0.8 : 1.6, 2.0, 0.95, r.next() * 0.8);
     }
-    this.jetAcc += dt * (alive ? 10 + 25 * this.flare : 0);
+    this.jetAcc += dt * (alive ? 8 + 25 * this.flare + 14 * sn.interest : 0);
     while (this.jetAcc > 1) {
       this.jetAcc -= 1;
       const a = hyaw + r.range(-1.7, 1.7);

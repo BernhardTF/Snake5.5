@@ -13,7 +13,7 @@ import { clamp, commit, damp, hash1, instanced, lerp, Rng, setColor, smooth, wri
 
 const MAXR = 1400;
 const MAXSPIKE = 2600;
-const NMANE = 52;
+const NMANE = 64;
 const NWH = 16;       // whisker nodes
 const NFLAME = 11;
 
@@ -377,7 +377,7 @@ export class DragonView extends LegendBase {
     if (alive && this.nextBlink < 0) { this.blink = 0.16; this.nextBlink = 2 + this.rng.next() * 4; }
     this.blink = Math.max(0, this.blink - dt);
     const lid = alive ? (this.blink > 0 ? Math.sin((this.blink / 0.16) * Math.PI) : 0) : smooth(0.2, 1.0, td);
-    for (const l of this.lids) { l.scale.z = 0.001 + lid * 0.07; l.visible = lid > 0.02; }
+    for (let i = 0; i < this.lids.length; i++) { const l = this.lids[i]; l.scale.z = 0.001 + lid * 0.07; l.visible = lid > 0.02; }
     // tongue: flicks with interest, lashes on eat
     const tOut = this.tongueT < 0.5 ? Math.sin(Math.min(1, this.tongueT / 0.5) * Math.PI) : alive ? 0.35 * sn.interest * (0.5 + 0.5 * Math.sin(this.t * 9)) : 0.4 * dead;
     this.tongue.scale.set(0.3 + 0.9 * tOut, 1, 1);
@@ -569,7 +569,7 @@ export class DragonView extends LegendBase {
       const len = (0.4 + 0.22 * seed) * sc * (1 - 0.35 * t) * (1 - 0.15 * dead);
       const pitch = alive ? 0.32 - 0.12 * stream + 0.08 * Math.sin(this.t * 4 + i) : 0.1 - 0.3 * dead;
       const c = Math.cos(yaw), si = Math.sin(yaw);
-      writeTRS(M, k, x - si * lat, y + c * lat, top + 0.005 * sc, ang, pitch, sg * 0.25, len, 0.13 * sc, len * 0.6);
+      writeTRS(M, k, x - si * lat, y + c * lat, top + 0.005 * sc, ang, pitch, sg * 0.25, len * 1.08, 0.105 * sc, len * 0.6);
       const red = seed < 0.62;
       if (red) setColor(this.mane, k, 0.62, 0.035, 0.03); else setColor(this.mane, k, 1.0, 0.62, 0.12);
       k++;
