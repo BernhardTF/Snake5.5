@@ -9,6 +9,7 @@ export async function runDev(kind: string, params: URLSearchParams) {
   if (kind === 'audio') return (await import('./audioDev')).runAudioDev(params);
   if (kind === 'ui') return (await import('./uiDev')).runUiDev(params);
   if (kind === 'snake') return (await import('../render/snake/preview')).runPreview(params);
+  if (kind === 'legend') return (await import('../render/characters/preview')).runLegendPreview(params);
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const { GameRenderer } = await import('../render/GameRenderer');
   const r = new GameRenderer(canvas);

@@ -1,9 +1,11 @@
 // GPU sand deformation simulation (ping-pong half-float RT).
 // R = height offset (groove < 0, berm > 0), G = disturbance (pattern erased), B = biome channel
-// (heat / moisture / wet sheen), A = foam residue (lagoon) / spare.
+// (heat / moisture / wet sheen / whiteness / bioluminescence / shard glow), A = foam residue (lagoon) / spare.
 import * as THREE from 'three';
 import type { BiomeId, RenderFrame } from '../../types';
-import { BIOME_VISUALS, type BiomeVisual } from '../biomeVisuals';
+import { BIOME_COUNT, BIOME_VISUALS, type BiomeVisual } from '../biomeVisuals';
+import { WORLDS_GLSL } from '../glsl/worlds';
+import { dustDevilPosInto, type DustDevilPos } from '../particles/dustDevils';
 import { FullscreenPass, makeRT, passMaterial } from '../fsq';
 import { NOISE_GLSL } from '../glsl/noise';
 
@@ -11,6 +13,13 @@ const MAXSEG = 16;
 const MARGIN = 1.0;
 const COV_RES = 3; // coverage samples per cell
 const LAG = 0.5;   // main groove is carved this far behind the head (see ingest)
+
+/** Asymmetric swash cycle 0..1 (quick run-up, slow backwash) for the lapping shores. */
+function sw(ph: number) {
+  const f = ph - Math.floor(ph);
+  const k = f < 0.32 ? f / 0.32 : 1 - (f - 0.32) / 0.68;
+  return k * k * (3 - 2 * k);
+}
 
 export const SEG_GROOVE = 0, SEG_BUMP = 1, SEG_CRATER = 2, SEG_RING = 3;
 
@@ -27,8 +36,12 @@ uniform vec4 uSegA[${MAXSEG}];
 uniform vec4 uSegP[${MAXSEG}];
 uniform int uSegCount;
 uniform vec4 uSegBox; // world bbox of this pass' stamps (early-out)
+uniform float uSharp;   // 0 = soft groove profile, 1 = crisp (luna)
+uniform vec4 uDevil[2]; // mars dust devils: x, y, radius, strength
+uniform vec2 uBoard;
 ${NOISE_GLSL}
 float sq(float x) { return x * x; }
+${WORLDS_GLSL}
 void main() {
   vec2 uv = vUv;
   vec4 c = texture2D(uPrev, uv);
@@ -72,6 +85,57 @@ void main() {
       c.a = max(c.a, exp(-sq((p.y - uWave.x) / 0.18)) * lace);
     }
 #endif
+#if BIOME == 5 || BIOME == 6
+    // calm lapping shore (top side): the shallows slowly smooth trails; the swash line wets
+    {
+      float eN = lapEdgeN(p, uWave.x, uTime);
+      float under = smoothstep(0.0, 0.5, eN);
+      c.g = max(c.g - 0.3 * uDt * under, 0.0);
+      c.r *= exp(-0.45 * uDt * under);
+#if BIOME == 6
+      // bioluminescence: plankton light up where the moving swash line runs over the sand
+      float lace = 0.55 + 0.45 * vnoise(p * vec2(2.2, 7.0) + uTime * 0.7);
+      c.b = max(c.b, exp(-sq((eN - 0.05) / 0.2)) * uWave.w * lace);
+#else
+      // pale revealed sand gets rewetted and blends back faster under water
+      c.b = max(c.b - 0.15 * uDt * under, 0.0);
+#endif
+    }
+#endif
+#if BIOME == 9
+    // dust devils: vortex winds sweep dust back into the scraped trails (partial refill)
+    for (int i = 0; i < 2; i++) {
+      vec4 dv = uDevil[i];
+      float dd = length(p - dv.xy);
+      float k = (1.0 - smoothstep(dv.z * 0.35, dv.z * 1.25, dd)) * dv.w;
+      c.g = max(c.g - 0.55 * k * uDt, 0.0);
+      c.r *= exp(-0.6 * k * uDt);
+    }
+#endif
+#if BIOME == 10
+    // methane lake: liquid, nothing holds a shape
+    float lake = titanLake(p, uBoard);
+    if (lake > 0.0) {
+      c.r *= exp(-4.0 * uDt);
+      c.g = max(c.g - 3.0 * uDt, 0.0);
+    }
+    // drizzle: drops that fell during (uTime - uDt, uTime] make tiny dimples, damp spots (B),
+    // and locally relax the sand so trails soften over time
+    {
+      vec2 cell = floor(p / DRIZ_C);
+      for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec3 dr = drizzleDrop(cell + vec2(float(i), float(j)), uTime);
+        if (dr.z >= uDt) continue;
+        float dd = length(p - dr.xy);
+        if (dd > 0.2) continue;
+        float fall = 1.0 - smoothstep(0.05, 0.2, dd);
+        c.r = mix(c.r, avg, 0.7 * fall);
+        c.r += -0.1 * (1.0 - smoothstep(0.0, 0.09, dd)) + 0.035 * exp(-sq((dd - 0.12) / 0.03));
+        c.g = max(c.g - 0.12 * fall, 0.0);
+        c.b = max(c.b, 1.0 - smoothstep(0.04, 0.16, dd));
+      }
+    }
+#endif
   }
   bool inBox = p.x >= uSegBox.x && p.y >= uSegBox.y && p.x <= uSegBox.z && p.y <= uSegBox.w;
   for (int i = 0; i < ${MAXSEG}; i++) {
@@ -93,8 +157,9 @@ void main() {
       float depth = P.y * (1.0 + rough * nz * 0.6);
       w *= 1.0 + rough * 0.25 * nz;
       float dn = dist / w;
-      float g = -depth * (1.0 - smoothstep(0.5, 0.95, dn));
-      float berm = tu >= 0.0 ? depth * 0.45 * exp(-sq((dn - 1.12) / 0.3)) : 0.0;
+      float g = -depth * (1.0 - smoothstep(mix(0.5, 0.8, uSharp), mix(0.95, 0.9, uSharp), dn));
+      float bw = mix(0.3, 0.1, uSharp);
+      float berm = tu >= 0.0 ? depth * mix(0.45, 0.3, uSharp) * exp(-sq((dn - mix(1.12, 1.0, uSharp)) / bw)) : 0.0;
       float prof = g + berm;
       // carve where the profile is below grade; only raise sand that isn't already a groove
       if (prof < 0.0) c.r = min(c.r, prof);
@@ -170,11 +235,17 @@ export class DeformSim {
   /** x = edge y (world), y = advancing(1/0), z = sheet alpha, w = foam strength */
   readonly wave = new THREE.Vector4(1e3, 0, 0, 0);
   private simTime = 0;
+  private prevEdge = 1e3;
+  /** Mars dust devils (x, y, radius, strength); shared with the sand shader as uniforms. */
+  readonly devils = [new THREE.Vector4(-100, -100, 0, 0), new THREE.Vector4(-100, -100, 0, 0)];
+  private devilTmp: DustDevilPos = { x: 0, y: 0, r: 0 };
+  private boardV = new THREE.Vector2(28, 18);
 
   constructor() {
     for (let i = 0; i < MAXSEG; i++) { this.segA.push(new THREE.Vector4()); this.segP.push(new THREE.Vector4()); }
-    for (let b = 0; b < 5; b++) {
+    for (let b = 0; b < BIOME_COUNT; b++) {
       this.mats.push(passMaterial(SIM_FRAG, {
+        uSharp: { value: 0 }, uDevil: { value: this.devils }, uBoard: { value: this.boardV },
         uPrev: { value: null }, uTexel: { value: this.texel }, uRegion: { value: this.region },
         uDt: { value: 0 }, uDiffK: { value: 0 }, uTalus: { value: 1 }, uRelax: { value: 1 },
         uErode: { value: 0 }, uSmear: { value: 0 }, uBDecay: { value: 0 }, uHeatSet: { value: 0 },
@@ -193,6 +264,7 @@ export class DeformSim {
   setBiome(id: BiomeId) {
     this.biome = BIOME_VISUALS[id];
     this.wave.set(1e3, 0, 0, 0);
+    this.prevEdge = 1e3;
     this.wavePhase = -1;
     this.nextWave = 5;
     this.waveClock = 0;
@@ -218,6 +290,7 @@ export class DeformSim {
 
   setBoard(w: number, h: number) {
     this.boardW = w; this.boardH = h;
+    this.boardV.set(w, h);
     this.alloc();
   }
 
@@ -361,6 +434,19 @@ export class DeformSim {
   private tmpPath = new Float32Array(40);
 
   private updateWaves(dt: number) {
+    const lap = this.biome.sim.lap;
+    if (lap) {
+      // calm lapping swash: quick run-up, slow backwash, two incommensurate periods (no surges)
+      const t = this.simTime;
+      const base = this.boardH - lap.edge;
+      const edge = base - lap.amp * (0.62 * sw(t / 7.3) + 0.38 * sw(t / 4.1 + 0.37));
+      const v = dt > 1e-4 && this.prevEdge < 1e2 ? (edge - this.prevEdge) / dt : 0;
+      this.prevEdge = edge;
+      // x = waterline y, y = highest swash line, z = sheet alpha, w = foam/glow (advancing swash)
+      const foam = Math.min(1, Math.max(0, -v) * 2.2 + 0.12);
+      this.wave.set(edge, base - lap.amp, 1, this.wave.w + (foam - this.wave.w) * Math.min(1, dt * 6));
+      return;
+    }
     if (!this.biome.sim.waves) { this.wave.set(1e3, 0, 0, 0); return; }
     const H = this.boardH;
     this.waveClock += dt;
@@ -405,6 +491,8 @@ export class DeformSim {
     const b = this.biome;
     const m = this.mats[b.index];
     const u = m.uniforms;
+    this.updateDevils(time);
+    u.uSharp.value = b.sim.sharp ?? 0;
     const texelWorld = this.region.z / this.texW;
     u.uDt.value = dt;
     u.uTime.value = time;
@@ -443,6 +531,16 @@ export class DeformSim {
     } while (qi < q.length);
     q.length = 0;
     r.setRenderTarget(null);
+  }
+
+  /** Dust devil positions (shared with the dresser's particle columns via dustDevilPosInto). */
+  updateDevils(time: number) {
+    const on = !!this.biome.sim.devils;
+    for (let i = 0; i < 2; i++) {
+      if (!on) { this.devils[i].set(-100, -100, 0, 0); continue; }
+      const d = dustDevilPosInto(this.devilTmp, time, i, this.boardW, this.boardH);
+      this.devils[i].set(d.x, d.y, d.r, 1);
+    }
   }
 
   dispose() {

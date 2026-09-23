@@ -18,6 +18,13 @@ const PALETTES: Record<BiomeId, { top: string; mid: string; bot: string; line: s
   lagoon: { top: '#f6b79a', mid: '#b98a86', bot: '#5f6f8f', line: 'rgba(40,30,60,0.2)', snake: '#1a1416' },
   svartsandur: { top: '#2a3240', mid: '#1a1d22', bot: '#111214', line: 'rgba(255,255,255,0.06)', snake: '#0a0a0a' },
   salar: { top: '#f3f8ff', mid: '#dbe8f5', bot: '#b5cbe2', line: 'rgba(60,90,130,0.16)', snake: '#1e1c1a' },
+  pinksands: { top: '#ffe6ea', mid: '#f7b8c6', bot: '#62c9cf', line: 'rgba(120,40,60,0.16)', snake: '#1e1b18' },
+  vaadhoo: { top: '#0b2d4d', mid: '#07162b', bot: '#041020', line: 'rgba(62,231,255,0.14)', snake: '#0a0a0a' },
+  dallol: { top: '#f5f07a', mid: '#c9d84a', bot: '#2fae8a', line: 'rgba(80,90,10,0.2)', snake: '#1e1b18' },
+  luna: { top: '#050608', mid: '#2a2d33', bot: '#8a929d', line: 'rgba(255,255,255,0.07)', snake: '#0a0a0a' },
+  mars: { top: '#e9b98a', mid: '#c1552a', bot: '#5a2214', line: 'rgba(60,20,10,0.22)', snake: '#1a1210' },
+  titan: { top: '#f3b35a', mid: '#9a5a22', bot: '#2a1a10', line: 'rgba(40,20,5,0.22)', snake: '#120c08' },
+  kepler: { top: '#2a1450', mid: '#6a36b8', bot: '#ff9ad5', line: 'rgba(255,220,255,0.1)', snake: '#0a0620' },
 };
 
 function paintBackground(canvas: HTMLCanvasElement, biome: BiomeId, t = 0) {
@@ -70,7 +77,7 @@ function paintBackground(canvas: HTMLCanvasElement, biome: BiomeId, t = 0) {
     g.fill();
     g.beginPath();
     g.ellipse(cx, cy, r, r * 0.8, 0, 0, Math.PI * 2);
-    g.fillStyle = biome === 'svartsandur' ? '#2b2f36' : '#6d6a5e';
+    g.fillStyle = biome === 'svartsandur' || biome === 'vaadhoo' || biome === 'luna' ? '#2b2f36' : '#6d6a5e';
     g.fill();
   }
   // snake: a curvy stroke through the centre with shadow and gold thread
@@ -109,7 +116,7 @@ function paintBackground(canvas: HTMLCanvasElement, biome: BiomeId, t = 0) {
 
 function seedProfile() {
   const p = store.profile;
-  p.xp = xpForLevel(3) + 60; // level 3
+  p.xp = xpForLevel(9) + 60; // level 9: most of Earth open, Beyond Earth still locked
   p.bests = {
     [bestKey('classic', 'karesansui', 'grid')]: 1840,
     [bestKey('classic', 'karesansui', 'glide')]: 960,
@@ -121,7 +128,7 @@ function seedProfile() {
   };
   p.daily = { [todayKey()]: 2210, '2026-09-20': 1780, '2026-09-18': 2560 };
   const now = Date.now();
-  p.achievements = { first: now - 86400e3 * 6, len25: now - 86400e3 * 4, combo4: now - 86400e3 * 3, score500: now - 86400e3 * 3, grid: now - 86400e3 * 2, daily: now - 86400e3, near10: now - 3600e3 };
+  p.achievements = { first: now - 86400e3 * 6, len25: now - 86400e3 * 4, combo4: now - 86400e3 * 3, score500: now - 86400e3 * 3, grid: now - 86400e3 * 2, daily: now - 86400e3, near10: now - 3600e3, traveller: now - 7200e3, hour: now - 5400e3 };
   p.stats = {
     runs: 17,
     foodEaten: 312,
@@ -135,7 +142,7 @@ function seedProfile() {
     bestLength: 38,
     bestCombo: 6,
     zenTime: 540,
-    biomesPlayed: ['karesansui', 'erg', 'lagoon'],
+    biomesPlayed: ['karesansui', 'erg', 'lagoon', 'svartsandur', 'salar'],
   };
 }
 

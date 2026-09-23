@@ -170,3 +170,135 @@ export function smoothNormals(g: THREE.BufferGeometry) {
   g.computeVertexNormals();
   return g;
 }
+
+// ------------------------------------------------------------------ prop helpers (build time only)
+
+/**
+ * Patch a standard/physical material with `vertexColors` so its emission is tinted per vertex:
+ * emission = emissive × vertexColor × aGlow. Geometries using it must carry a float `aGlow`
+ * attribute (see `setGlow`). Used for glowing crystal tips, plankton specks, fungus spots.
+ */
+export function vertexGlow<T extends THREE.MeshStandardMaterial>(m: T, key: string): T {
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vColor.rgb * vGlow;');
+  };
+  m.customProgramCacheKey = () => 'vglow:' + key;
+  return m;
+}
+
+/** Set a per-vertex glow mask (`aGlow`) from a constant or a function of position. */
+export function setGlow(g: THREE.BufferGeometry, f: number | ((p: THREE.Vector3) => number)) {
+  const p = g.getAttribute('position');
+  const a = new Float32Array(p.count);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    if (typeof f === 'number') a[i] = f;
+    else { v.fromBufferAttribute(p, i); a[i] = f(v); }
+  }
+  g.setAttribute('aGlow', new THREE.BufferAttribute(a, 1));
+  return g;
+}
+
+/** (Re)write the vertex colour attribute from position + normal. */
+export function colorize(g: THREE.BufferGeometry, f: (p: THREE.Vector3, n: THREE.Vector3, i: number) => THREE.Color) {
+  if (!g.getAttribute('normal')) g.computeVertexNormals();
+  const p = g.getAttribute('position'), n = g.getAttribute('normal');
+  const c = new Float32Array(p.count * 3);
+  const v = new THREE.Vector3(), vn = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i); vn.fromBufferAttribute(n, i);
+    const cc = f(v, vn, i);
+    c[i * 3] = cc.r; c[i * 3 + 1] = cc.g; c[i * 3 + 2] = cc.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return g;
+}
+
+/**
+ * Parametric grid surface. f(u, v) -> position (u, v in 0..1). Returns indexed geometry with
+ * smooth normals (seams are not welded; use for sheets, shells, leaves).
+ */
+export function surface(nu: number, nv: number, f: (u: number, v: number, out: THREE.Vector3) => void, flip = false) {
+  const pos: number[] = [], idx: number[] = [];
+  const o = new THREE.Vector3();
+  for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+    f(i / nu, j / nv, o);
+    pos.push(o.x, o.y, o.z);
+  }
+  const V = nv + 1;
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = i * V + j, b = a + 1, c = a + V, d = c + 1;
+    if (flip) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Angular rock: a noisy icosahedron sliced by random planes (sharp flat facets), flat-shaded
+ * (non-indexed). Unit radius ~1, base flattened at z = floor.
+ */
+export function facetRock(seed: number, opts: { detail?: number; cuts?: number; jag?: number; scale?: THREE.Vector3; floor?: number | null } = {}) {
+  const r = rng(seed);
+  const detail = opts.detail ?? 1, cuts = opts.cuts ?? 7, jag = opts.jag ?? 0.35;
+  const g = new THREE.IcosahedronGeometry(1, detail).toNonIndexed();
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  const p = g.getAttribute('position');
+  const planes: { n: THREE.Vector3; d: number }[] = [];
+  for (let k = 0; k < cuts; k++) {
+    const n = new THREE.Vector3(r() - 0.5, r() - 0.5, (r() - 0.3) * 0.9).normalize();
+    planes.push({ n, d: 0.62 + r() * 0.3 });
+  }
+  const v = new THREE.Vector3();
+  const sc = opts.scale ?? new THREE.Vector3(1, 1, 1);
+  const floor = opts.floor === undefined ? -0.2 : opts.floor;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const d = 1 + (noise3(v.x * 1.7 + 3, v.y * 1.7, v.z * 1.7, seed) - 0.5) * jag * 2;
+    v.multiplyScalar(d);
+    for (const pl of planes) {
+      const k = v.dot(pl.n) - pl.d;
+      if (k > 0) v.addScaledVector(pl.n, -k);
+    }
+    v.multiply(sc);
+    if (floor !== null && v.z < floor) v.z = floor;
+    p.setXYZ(i, v.x, v.y, floor === null ? v.z : v.z - floor);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+export function smoothstep(a: number, b: number, x: number) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Centre a geometry (or several sharing one frame) on XY and scale uniformly so the farthest
+ * vertex sits at radius R from the Z axis. Keeps the base on z = 0 plane untouched (z scales). */
+export function fitUnit(geos: THREE.BufferGeometry[], R = 1) {
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const g of geos) {
+    const p = g.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i);
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  let m = 0;
+  for (const g of geos) {
+    const p = g.getAttribute('position');
+    for (let i = 0; i < p.count; i++) m = Math.max(m, Math.hypot(p.getX(i) - cx, p.getY(i) - cy));
+  }
+  const k = R / (m || 1);
+  for (const g of geos) { g.translate(-cx, -cy, 0); g.scale(k, k, k); }
+  return geos;
+}

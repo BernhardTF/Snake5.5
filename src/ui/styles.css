@@ -3211,6 +3211,302 @@ kbd {
   color: #ffb199;
 }
 
+/* ------------------------------------------------------------------ expansion: tabs */
+.seg-tabs .seg-btn {
+  white-space: nowrap;
+}
+.tab-count {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 245, 230, 0.1);
+  color: var(--paper-mute);
+}
+.seg-btn.on .tab-count {
+  background: rgba(42, 28, 12, 0.12);
+  color: var(--ink-text);
+}
+
+/* ------------------------------------------------------------------ expansion: realms */
+.realm-row {
+  display: flex;
+  margin: -2px 0 12px;
+}
+.biome-card.realm-beyond {
+  border-color: rgba(190, 170, 255, 0.2);
+  background:
+    radial-gradient(120% 60% at 50% 100%, rgba(120, 90, 220, 0.12), transparent 70%),
+    var(--tile);
+}
+.biome-card.realm-beyond:hover {
+  border-color: rgba(200, 185, 255, 0.36);
+}
+.biome-stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.95) 0 0.7px, transparent 1.2px) 0 0 / 23px 19px,
+    radial-gradient(circle, rgba(255, 255, 255, 0.7) 0 0.6px, transparent 1px) 9px 7px / 37px 29px,
+    radial-gradient(circle, rgba(220, 210, 255, 0.85) 0 1px, transparent 1.6px) 17px 3px / 53px 41px,
+    radial-gradient(ellipse 80% 40% at 30% 20%, rgba(170, 140, 255, 0.22), transparent 70%);
+  mix-blend-mode: screen;
+  opacity: 0.8;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 90%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 90%);
+}
+.biome-card.realm-beyond .biome-region {
+  color: color-mix(in srgb, var(--paper-mute) 70%, #c9b8ff);
+}
+.realm-tabs .tab-beyond.on {
+  background: linear-gradient(180deg, #f3efff, #dcd3f5);
+}
+
+/* ------------------------------------------------------------------ expansion: collection */
+.coll-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.coll-tabs .seg-btn {
+  min-height: 44px;
+  padding: 0 20px;
+}
+.coll-tabs .tab-legend.on {
+  background: linear-gradient(180deg, #fff3c4, #e9c25a);
+}
+.legend-intro {
+  text-align: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--paper-dim);
+  margin: -4px 0 16px;
+}
+.legend-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.legend-card {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(44, 31, 16, 0.94), rgba(20, 14, 8, 0.96)) padding-box,
+    linear-gradient(135deg, #6e4f16, #f5d77a 20%, #a87a28 42%, #fff0b8 58%, #8a6420 78%, #e9c25a) border-box;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 230, 160, 0.1),
+    0 12px 30px -18px rgba(242, 201, 76, 0.55);
+}
+.legend-card::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: 2;
+  border-radius: 12px;
+  border: 1px solid rgba(242, 201, 76, 0.28);
+  pointer-events: none;
+}
+.legend-card:hover {
+  background:
+    linear-gradient(180deg, rgba(56, 40, 20, 0.94), rgba(26, 18, 10, 0.96)) padding-box,
+    linear-gradient(135deg, #7a5a1c, #fff0b8 22%, #b8862c 45%, #fff6d0 60%, #9a7224 80%, #f5d77a) border-box;
+}
+.legend-card.on {
+  background:
+    radial-gradient(90% 60% at 50% 0%, rgba(242, 201, 76, 0.16), transparent 70%) padding-box,
+    linear-gradient(180deg, rgba(56, 40, 20, 0.94), rgba(26, 18, 10, 0.96)) padding-box,
+    linear-gradient(135deg, #8a6420, #fff6d0 20%, #d8a83a 42%, #ffffff 58%, #b8862c 78%, #fff0b8) border-box;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 236, 170, 0.35),
+    0 0 0 1px rgba(242, 201, 76, 0.4),
+    0 16px 40px -14px rgba(242, 201, 76, 0.7);
+}
+.legend-card .skin-stage {
+  height: 140px;
+  overflow: hidden;
+  border-bottom-color: rgba(242, 201, 76, 0.22);
+  background:
+    radial-gradient(ellipse 65% 70% at 50% 60%, rgba(242, 201, 76, 0.18), transparent 72%),
+    radial-gradient(circle, rgba(242, 201, 76, 0.1) 0 0.8px, transparent 1.2px) 0 0 / 14px 12px,
+    linear-gradient(180deg, #1c130b, #0e0906);
+}
+.legend-card .swatch {
+  width: 210px;
+  height: 94px;
+}
+.legend-card.locked .swatch {
+  filter: grayscale(1) brightness(0.55) contrast(0.85);
+}
+.legend-card .skin-name {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  color: #fff4d6;
+}
+.legend-card .skin-species {
+  font-size: 16px;
+}
+.legend-card .skin-desc {
+  font-size: 13px;
+}
+.legend-card .skin-status.is-locked::before {
+  background: var(--gold);
+}
+.legend-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #2a1c0c;
+  background: linear-gradient(180deg, #fff3c4, #e2b44a 60%, #c8962e);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.legend-badge .ic svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+.legend-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.legend-shine::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 38%;
+  background: linear-gradient(100deg, transparent, rgba(255, 240, 190, 0.16) 45%, rgba(255, 255, 255, 0.26) 50%, rgba(255, 240, 190, 0.16) 55%, transparent);
+  transform: translateX(-120%) skewX(-12deg);
+  animation: legend-shine 6.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.45s);
+}
+.legend-card.locked .legend-shine {
+  display: none;
+}
+@keyframes legend-shine {
+  0%,
+  62% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(380%) skewX(-12deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .legend-shine::after {
+    animation: none;
+    display: none;
+  }
+}
+.ss-ui.rm .legend-shine::after {
+  display: none;
+}
+.skin-chip.is-legend .skin-dot {
+  box-shadow:
+    0 0 0 2px #e9c25a,
+    0 0 0 3px rgba(42, 28, 12, 0.6),
+    0 0 12px rgba(242, 201, 76, 0.5);
+}
+.skin-chip.is-legend .chip-sub {
+  color: var(--gold-2);
+}
+@media (max-width: 560px) {
+  .coll-bar .seg {
+    display: flex;
+    width: 100%;
+  }
+  .coll-tabs .seg-btn {
+    flex: 1;
+    padding: 0 10px;
+  }
+  .legend-grid {
+    grid-template-columns: 1fr;
+  }
+  .legend-card {
+    flex-direction: row;
+  }
+  .legend-card .skin-stage {
+    flex: 0 0 132px;
+    height: auto;
+    min-height: 150px;
+    border-bottom: 0;
+    border-right: 1px solid rgba(242, 201, 76, 0.22);
+  }
+  .legend-card .swatch {
+    width: 122px;
+    height: 55px;
+  }
+  .legend-badge {
+    top: 9px;
+    left: 9px;
+  }
+  .legend-card .skin-meta {
+    padding: 12px 14px 13px;
+  }
+  .legend-card .skin-name {
+    font-size: 20px;
+  }
+  .legend-intro {
+    font-size: 15px;
+  }
+  .realm-row .seg {
+    display: flex;
+    width: 100%;
+  }
+  .realm-row .seg-btn {
+    flex: 1;
+    padding: 0 8px;
+  }
+}
+
+/* ------------------------------------------------------------------ expansion: credits */
+.realm-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-2);
+}
+.realm-head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(241, 213, 138, 0.35), transparent);
+}
+.realm-head-beyond {
+  margin-top: 22px;
+  color: #c9b8ff;
+}
+.realm-head-beyond::after {
+  background: linear-gradient(90deg, rgba(201, 184, 255, 0.35), transparent);
+}
+.realm-head + .culture {
+  padding-top: 2px;
+}
+
 /* ------------------------------------------------------------------ reduced motion */
 .ss-ui.rm *,
 .ss-ui.rm *::before,

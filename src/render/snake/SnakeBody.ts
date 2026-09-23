@@ -30,28 +30,38 @@ const BELLY = 0.62;
 // Radius profile of the head/neck (x = distance from snout tip in body radii, W relative width).
 const HX = [0.42, 1.0, 1.75, 2.35, 2.85, 3.35, 4.2, 6.0];
 const HW = [0.56, 0.8, 1.06, 1.22, 1.1, 0.88, 0.88, 1.0];
-function headProfile(x: number): number {
+/** Very broad, triangular viper head (gaboon): straight flanks out to wide jaw corners, thin neck. */
+const HW_BROAD = [0.64, 0.84, 1.12, 1.36, 1.5, 0.98, 0.8, 1.0];
+function profileFrom(W: number[], x: number): number {
   if (x <= 0) return 0;
-  if (x < HX[0]) { const t = 1 - x / HX[0]; return HW[0] * Math.sqrt(Math.max(0, 1 - t * t)); }
+  if (x < HX[0]) { const t = 1 - x / HX[0]; return W[0] * Math.sqrt(Math.max(0, 1 - t * t)); }
   if (x >= HX[HX.length - 1]) return 1;
   let i = 0;
   while (x > HX[i + 1]) i++;
   const t = (x - HX[i]) / (HX[i + 1] - HX[i]);
   // monotone-ish cubic hermite with finite-difference tangents
   const m = (k: number) => {
-    if (k <= 0) return (HW[1] - HW[0]) / (HX[1] - HX[0]);
+    if (k <= 0) return (W[1] - W[0]) / (HX[1] - HX[0]);
     if (k >= HX.length - 1) return 0;
-    return ((HW[k + 1] - HW[k]) / (HX[k + 1] - HX[k]) + (HW[k] - HW[k - 1]) / (HX[k] - HX[k - 1])) * 0.5;
+    return ((W[k + 1] - W[k]) / (HX[k + 1] - HX[k]) + (W[k] - W[k - 1]) / (HX[k] - HX[k - 1])) * 0.5;
   };
   const h = HX[i + 1] - HX[i];
   const t2 = t * t, t3 = t2 * t;
-  return (2 * t3 - 3 * t2 + 1) * HW[i] + (t3 - 2 * t2 + t) * h * m(i) + (-2 * t3 + 3 * t2) * HW[i + 1] + (t3 - t2) * h * m(i + 1);
+  return (2 * t3 - 3 * t2 + 1) * W[i] + (t3 - 2 * t2 + t) * h * m(i) + (-2 * t3 + 3 * t2) * W[i + 1] + (t3 - t2) * h * m(i + 1);
 }
-/** Height/width ratio along the head (flat spade head, rounder body). */
-function heightRatio(x: number) {
-  if (x < 2.9) return 0.62 + 0.04 * Math.min(1, x / 1.0);
-  if (x < 4.5) return 0.66 + (x - 2.9) / 1.6 * 0.16;
-  return 0.82;
+/** Relative half-width at x body radii from the snout tip. broad: 0 = standard head, 1 = gaboon head. */
+export function headProfile(x: number, broad = 0): number {
+  const a = profileFrom(HW, x);
+  return broad > 0 ? a + (profileFrom(HW_BROAD, x) - a) * broad : a;
+}
+/** Height/width ratio along the head (flat spade head, rounder body). Broad heads are flatter. */
+function heightRatio(x: number, broad = 0) {
+  let k: number;
+  if (x < 2.9) k = 0.62 + 0.04 * Math.min(1, x / 1.0);
+  else if (x < 4.5) k = 0.66 + (x - 2.9) / 1.6 * 0.16;
+  else k = 0.82;
+  if (broad > 0 && x < 4.5) k *= 1 - 0.2 * broad * (1 - smooth(2.9, 4.5, x));
+  return k;
 }
 
 export interface BodyInput {
@@ -67,6 +77,8 @@ export interface BodyInput {
   wavePhase: number;
   waveLen: number;
   headLead: number;
+  /** Optional head shape: 0 = standard (default), 1 = very broad triangular viper head. */
+  headWidth?: number;
 }
 
 /** Frame at an arbitrary arclength, used to attach head parts. */
@@ -214,6 +226,7 @@ export class SnakeBody {
       const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
     }
     const kw = TWO_PI / inp.waveLen;
+    const broad = inp.headWidth ?? 0;
     for (let q = 0; q < nr; q++) {
       const sq = rS[q];
       let x: number, y: number, tx: number, ty: number;
@@ -240,7 +253,7 @@ export class SnakeBody {
       }
       // radius profile
       const xr = (sq - s0) / r0;
-      let W = headProfile(xr);
+      let W = headProfile(xr, broad);
       if (sq > taperStart) {
         const tt = Math.min(1, (sq - taperStart) / taperLen);
         W *= Math.pow(Math.max(0, 1 - Math.pow(tt, 1.35)), 0.85);
@@ -265,7 +278,7 @@ export class SnakeBody {
       }
       if (rVoid[q]) cap = 0;
       rW[q] = W * bul * cap;
-      rH[q] = heightRatio(xr) * (1 + (bul - 1) * 0.8);
+      rH[q] = heightRatio(xr, broad) * (1 + (bul - 1) * 0.8);
       // lateral undulation (0 at head, grows backwards)
       const sT = sq - s0;
       const grow = smooth(0.55, 3.2, sT) * (0.75 + 0.25 * Math.min(1, sT / 14));

@@ -25,6 +25,20 @@ const TIMBRES: Record<BiomeId, SlitherTimbre> = {
   svartsandur: { f0: 450, f1: 1200, q: 0.8, bodyGain: 0.45, density: 180, grainMs: 4, cType: 'bandpass', cf: 1500, cq: 0.7, cGain: 0.7, hissF: 3000, hissGain: 0.2, color: 'brown' },
   // crystalline crackle
   salar: { f0: 1500, f1: 3500, q: 1.2, bodyGain: 0.35, density: 140, grainMs: 1, cType: 'highpass', cf: 5000, cq: 1, cGain: 0.6, hissF: 6000, hissGain: 0.25, color: 'white' },
+  // fine, soft coral sand: silky hiss with a little shell grit
+  pinksands: { f0: 1200, f1: 3000, q: 0.7, bodyGain: 0.62, density: 120, grainMs: 1.2, cType: 'highpass', cf: 4200, cq: 0.8, cGain: 0.28, hissF: 4600, hissGain: 0.3, color: 'pink' },
+  // dark wet sand: soft squelch
+  vaadhoo: { f0: 340, f1: 880, q: 1.8, bodyGain: 0.75, density: 60, grainMs: 7, cType: 'lowpass', cf: 1100, cq: 2.5, cGain: 0.42, hissF: 2500, hissGain: 0.18, color: 'brown' },
+  // brittle sulphur crust crunching
+  dallol: { f0: 900, f1: 2200, q: 1, bodyGain: 0.4, density: 230, grainMs: 2, cType: 'bandpass', cf: 3200, cq: 1.2, cGain: 0.72, hissF: 5000, hissGain: 0.22, color: 'pink' },
+  // regolith, felt through the suit: muted and gritty
+  luna: { f0: 480, f1: 1250, q: 0.8, bodyGain: 0.4, density: 200, grainMs: 3, cType: 'bandpass', cf: 1700, cq: 0.8, cGain: 0.6, hissF: 2600, hissGain: 0.12, color: 'brown' },
+  // dry rust dust scraping over basalt
+  mars: { f0: 800, f1: 2000, q: 0.9, bodyGain: 0.55, density: 150, grainMs: 2.5, cType: 'bandpass', cf: 2400, cq: 0.9, cGain: 0.45, hissF: 3800, hissGain: 0.28, color: 'pink' },
+  // damp hydrocarbon grains, muffled by the thick air
+  titan: { f0: 240, f1: 640, q: 1.4, bodyGain: 0.8, density: 90, grainMs: 6, cType: 'lowpass', cf: 800, cq: 1.5, cGain: 0.5, hissF: 1500, hissGain: 0.15, color: 'brown' },
+  // tinkling surface crystals
+  kepler: { f0: 1800, f1: 4200, q: 1.6, bodyGain: 0.3, density: 110, grainMs: 0.8, cType: 'highpass', cf: 6000, cq: 1.5, cGain: 0.65, hissF: 7000, hissGain: 0.25, color: 'white' },
 };
 
 export class Slither {
@@ -165,7 +179,7 @@ export class Slither {
     this.apply();
   }
 
-  setGate(g: number) { this.gate = g; this.apply(); }
+  setGate(g: number) { if (g === this.gate) return; this.gate = g; this.apply(); }
 
   private apply() {
     if (!this.started) return;

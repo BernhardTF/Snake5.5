@@ -41,6 +41,57 @@ const BEDS: Record<BiomeId, BedLayer[]> = {
     { color: 'pink', type: 'lowpass', f: 260, q: 0.7, gain: 0.05, gl: [[0.03, 0.5]] },
     { color: 'white', type: 'bandpass', f: 7000, q: 4, fl: [[0.08, 1500]], gain: 0.003, gl: [[0.07, 0.9]], pan: -0.4 },
   ],
+  pinksands: [
+    // gentle lapping on the shallows edge (short ~6 s cycles, no big surges)
+    { color: 'brown', type: 'lowpass', f: 520, q: 0.6, fl: [[0.16, 300]], gain: 0.05, gl: [[0.16, 0.7]], pan: -0.35 },
+    { color: 'white', type: 'highpass', f: 3000, q: 0.6, fl: [[0.16, 700, 1.4]], gain: 0.0045, gl: [[0.16, 0.9, 1.4]], pan: -0.2 },
+    // sea-grape leaves in the trade wind
+    { color: 'pink', type: 'bandpass', f: 2100, q: 1.2, fl: [[0.07, 600]], gain: 0.012, gl: [[0.05, 0.6], [0.23, 0.3]], pan: 0.35 },
+    { color: 'pink', type: 'lowpass', f: 260, q: 0.7, gain: 0.028, gl: [[0.04, 0.4]] },
+  ],
+  vaadhoo: [
+    // slow night swell
+    { color: 'brown', type: 'lowpass', f: 480, q: 0.6, fl: [[0.075, 300]], gain: 0.06, gl: [[0.075, 0.7]], pan: 0.2 },
+    { color: 'white', type: 'highpass', f: 3200, q: 0.6, fl: [[0.075, 800, 3]], gain: 0.004, gl: [[0.075, 0.9, 3]], pan: 0.3 },
+    // insect trill from the island (fast AM), breathing slowly in and out
+    { color: 'white', type: 'bandpass', f: 4700, q: 9, gain: 0.0035, gl: [[13.5, 0.85], [0.045, 0.7]], pan: -0.45 },
+    { color: 'white', type: 'bandpass', f: 5600, q: 11, gain: 0.0022, gl: [[16.2, 0.85], [0.031, 0.8, 7]], pan: 0.5 },
+  ],
+  dallol: [
+    // hot, gusty desert wind
+    { color: 'pink', type: 'bandpass', f: 850, q: 0.9, fl: [[0.06, 350], [0.021, 150]], gain: 0.05, gl: [[0.05, 0.6], [0.14, 0.25]] },
+    // fumarole hiss
+    { color: 'white', type: 'bandpass', f: 3200, q: 1.1, fl: [[0.03, 700]], gain: 0.006, gl: [[0.037, 0.8]], pan: 0.35 },
+    // geothermal rumble
+    { color: 'brown', type: 'lowpass', f: 85, q: 0.9, gain: 0.08, gl: [[0.043, 0.35]] },
+  ],
+  luna: [
+    // airless: only the faint life-support hum and radio static in the suit
+    { color: 'brown', type: 'lowpass', f: 70, q: 1.2, gain: 0.05, gl: [[0.02, 0.2]] },
+    { color: 'white', type: 'bandpass', f: 2400, q: 0.8, gain: 0.0012, gl: [[0.11, 0.8], [0.37, 0.4]], pan: 0.3 },
+  ],
+  mars: [
+    // thin, high wind; low buffeting; fine grit
+    { color: 'pink', type: 'bandpass', f: 1500, q: 2.2, fl: [[0.05, 650], [0.017, 300]], gain: 0.028, gl: [[0.045, 0.7], [0.12, 0.25]] },
+    { color: 'pink', type: 'lowpass', f: 220, q: 0.8, fl: [[0.03, 80]], gain: 0.045, gl: [[0.033, 0.55]] },
+    { color: 'white', type: 'highpass', f: 6000, q: 0.7, gain: 0.0022, gl: [[0.06, 0.9]], pan: -0.35 },
+  ],
+  titan: [
+    // deep submerged rumble
+    { color: 'brown', type: 'lowpass', f: 110, q: 1, fl: [[0.02, 35]], gain: 0.11, gl: [[0.027, 0.4]] },
+    // muffled wind through the thick air
+    { color: 'pink', type: 'lowpass', f: 320, q: 0.8, fl: [[0.04, 120]], gain: 0.035, gl: [[0.035, 0.6]] },
+    // slow methane drizzle
+    { color: 'pink', type: 'highpass', f: 3800, q: 0.6, gain: 0.004, gl: [[0.05, 0.6], [0.7, 0.25]], pan: 0.3 },
+  ],
+  kepler: [
+    // alien wind with a singing resonance
+    { color: 'pink', type: 'bandpass', f: 700, q: 1.4, fl: [[0.05, 280]], gain: 0.04, gl: [[0.043, 0.6]] },
+    { color: 'pink', type: 'bandpass', f: 1400, q: 14, fl: [[0.027, 500], [0.071, 120]], gain: 0.03, gl: [[0.05, 0.8]], pan: -0.3 },
+    // crystalline shimmer
+    { color: 'white', type: 'bandpass', f: 8200, q: 5, fl: [[0.09, 1800]], gain: 0.0035, gl: [[0.07, 0.9]], pan: 0.4 },
+    { color: 'brown', type: 'lowpass', f: 120, q: 0.8, gain: 0.05, gl: [[0.03, 0.4]] },
+  ],
 };
 
 export class AmbienceBed {

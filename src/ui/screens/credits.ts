@@ -15,20 +15,37 @@ const NOTES: Record<BiomeId, string> = {
     'Iceland’s black sand beaches are made of basalt worn down by the Atlantic. Sagas and folklore often read the land’s fire and ice as living forces to be respected.',
   salar:
     'The Salar de Uyuni is the world’s largest salt flat, high on the Bolivian Altiplano. Aymara and Quechua communities have harvested its salt for generations; in the rainy season it becomes a mirror of the sky.',
+  pinksands:
+    'Harbour Island’s pink sand gets its blush from Foraminifera, tiny single-celled creatures with red-pink shells, mixed with crushed coral. Bahamians celebrate Junkanoo each Boxing Day and New Year with goatskin drums, cowbells and dazzling crêpe-paper costumes.',
+  vaadhoo:
+    'The glowing shores of the Maldives come from bioluminescent plankton such as dinoflagellates, which flash blue when the water is disturbed. For Maldivian islanders the sea has always been livelihood and road, from pole-and-line tuna fishing to dhoni boats between atolls.',
+  dallol:
+    'Dallol sits in Ethiopia’s Danakil Depression, more than 100 m below sea level and one of the hottest inhabited places on Earth. Its colours come from sulphur, iron salts and acidic hot springs, and Afar caravans still cut salt slabs by hand and carry them out by camel.',
+  luna:
+    'The Sea of Tranquillity is a basalt plain where Apollo 11 landed in 1969. With no wind or water, footprints on the Moon can last for millions of years, slowly softened only by micrometeorites.',
+  mars:
+    'Jezero Crater once held a lake fed by a river delta, which is why NASA’s Perseverance rover went there in 2021 to look for signs of ancient life. Mars is red because its dust is rich in iron oxide, and dust devils regularly sweep its plains.',
+  titan:
+    'Titan, Saturn’s largest moon, is the only other world known to have stable surface liquids: lakes and seas of methane and ethane. Its dark dunes are thought to be made of organic grains, seen through radar by the Cassini–Huygens mission.',
+  kepler:
+    'Kepler-186f, found by NASA’s Kepler telescope in 2014, was the first Earth-sized planet discovered in the habitable zone of another star, a red dwarf about 580 light-years away. Its surface is unknown; this world, and its second sun, are pure imagination.',
 };
 
 export function buildCredits(ctx: ScreenCtx): Screen {
+  const note = (b: (typeof BIOMES)[number]) =>
+    h(
+      'article',
+      { class: `culture${b.realm === 'beyond' ? ' culture-beyond' : ''}`, style: { '--bacc': b.accent } },
+      h('div', { class: 'culture-head' }, h('span', { class: 'culture-dot', style: { background: b.cardGradient } }), h('span', { class: 'culture-name' }, b.name), h('span', { class: 'culture-local' }, b.localName), h('span', { class: 'culture-region' }, b.region)),
+      h('p', null, NOTES[b.id]),
+    );
   const cultures = h(
     'div',
     { class: 'culture-list' },
-    BIOMES.map((b) =>
-      h(
-        'article',
-        { class: 'culture', style: { '--bacc': b.accent } },
-        h('div', { class: 'culture-head' }, h('span', { class: 'culture-dot', style: { background: b.cardGradient } }), h('span', { class: 'culture-name' }, b.name), h('span', { class: 'culture-local' }, b.localName), h('span', { class: 'culture-region' }, b.region)),
-        h('p', null, NOTES[b.id]),
-      ),
-    ),
+    h('h3', { class: 'realm-head' }, 'Earth'),
+    BIOMES.filter((b) => b.realm === 'earth').map(note),
+    h('h3', { class: 'realm-head realm-head-beyond' }, 'Beyond Earth'),
+    BIOMES.filter((b) => b.realm === 'beyond').map(note),
   );
 
   const el = h(
@@ -47,7 +64,7 @@ export function buildCredits(ctx: ScreenCtx): Screen {
           { class: 'panel credits-hero', style: { '--i': '0' } },
           logo('logo-sm'),
           h('p', { class: 'credits-lead' }, 'Designed & built with Claude'),
-          h('p', { class: 'muted' }, 'A love letter to the original Snake, and to the gardens, deserts and shores that inspired each world.'),
+          h('p', { class: 'muted' }, 'A love letter to the original Snake, and to the gardens, deserts and shores that inspired each world, and to the worlds beyond.'),
         ),
         h('div', { class: 'panel', style: { '--i': '1' } }, sectionTitle('The worlds'), cultures,
           h('p', { class: 'fine' }, 'These worlds are imaginative tributes, not reproductions. We have tried to represent each place and tradition with care and respect.')),

@@ -2,12 +2,30 @@
 import * as THREE from 'three';
 import { NOISE_GLSL } from '../glsl/noise';
 import { SEA_GLSL } from '../sand/sandShader';
+import { BIOME_INDEX } from '../biomeVisuals';
+import type { BiomeId } from '../../types';
+import { SHARED_GLSL, NEW_BIOMES_GLSL } from './newWorlds';
+
+const idx = (id: BiomeId, fallback: number) => (BIOME_INDEX as Partial<Record<BiomeId, number>>)[id] ?? fallback;
+/** Compile-time biome ids for the expansion worlds (follow BIOME_INDEX; fall back to BiomeId order). */
+const BIOME_DEFINES = /* glsl */ `
+#define B_PINK ${idx('pinksands', 5)}
+#define B_VAADHOO ${idx('vaadhoo', 6)}
+#define B_DALLOL ${idx('dallol', 7)}
+#define B_LUNA ${idx('luna', 8)}
+#define B_MARS ${idx('mars', 9)}
+#define B_TITAN ${idx('titan', 10)}
+#define B_KEPLER ${idx('kepler', 11)}
+`;
 
 const FRAME_VERT = /* glsl */ `
 varying vec2 vP;
+varying vec4 vView; // visible world rect (left, bottom, right, top); the mesh is the view + 2 cells each side
 void main() {
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vP = wp.xy;
+  vec2 hs = (vec2(modelMatrix[0][0], modelMatrix[1][1]) - 4.0) * 0.5;
+  vView = vec4(modelMatrix[3].xy - hs, modelMatrix[3].xy + hs);
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
@@ -15,6 +33,7 @@ void main() {
 const FRAME_FRAG = /* glsl */ `
 precision highp float;
 varying vec2 vP;
+varying vec4 vView;
 uniform vec2 uBoard;
 uniform float uBorder;
 uniform float uFrameH;
@@ -49,6 +68,17 @@ float railH(float a, float b) { return railProfile(a, b).x; }
 
 struct Surf { vec3 alb; float h; vec2 nrm; float spec; float gloss; vec3 emit; };
 
+vec3 light(Surf s, vec3 N, float vis) {
+  vec3 L = normalize(uSunDir);
+  float diff = max(dot(N, L), 0.0);
+  vec3 amb = mix(uGroundColor, uSkyColor, N.z * 0.5 + 0.5);
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  float spec = pow(max(dot(N, H), 0.0), s.gloss) * s.spec;
+  return s.alb * (uSunColor * diff * vis + amb) + uSunColor * spec * vis + s.emit;
+}
+
+${BIOME_DEFINES}
+${SHARED_GLSL}
 // ----------------------------------------------------------------------------- per biome materials
 #if BIOME == 0
 // dark aged hinoki / keyaki wood
@@ -250,6 +280,7 @@ Surf outerSurf(vec2 p) {
   s.h = 0.0; s.spec = 0.35; s.gloss = 60.0; s.emit = vec3(0.0);
   return s;
 }
+${NEW_BIOMES_GLSL}
 #else
 vec3 aguayo(float u, float v) {
   // u along, v across (0..1)
@@ -307,15 +338,6 @@ Surf outerSurf(vec2 p) {
 }
 #endif
 
-vec3 light(Surf s, vec3 N, float vis) {
-  vec3 L = normalize(uSunDir);
-  float diff = max(dot(N, L), 0.0);
-  vec3 amb = mix(uGroundColor, uSkyColor, N.z * 0.5 + 0.5);
-  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-  float spec = pow(max(dot(N, H), 0.0), s.gloss) * s.spec;
-  return s.alb * (uSunColor * diff * vis + amb) + uSunColor * spec * vis + s.emit;
-}
-
 void main() {
   vec2 p = vP;
   float d = boardDist(p);
@@ -339,6 +361,9 @@ void main() {
   float vis = 1.0 - 0.6 * leaf;
 
   vec3 col;
+#ifdef CUSTOM_ALL
+  col = shadeAll(p, d, q, vert, outward, along, vis, fw);
+#else
 #if BIOME == 2
   if (!vert && p.y > uBoard.y) {
     // open sea side: wet shore then ocean with swash
@@ -371,6 +396,9 @@ void main() {
     float mit = 1.0 - smoothstep(0.0, 0.02, abs(q.x - q.y));
     col *= 1.0 - 0.5 * mit * step(0.0, min(q.x, q.y));
   } else {
+#ifdef CUSTOM_OUTER
+    col = shadeOuter(p, d, vis, fw);
+#else
     Surf s = outerSurf(p);
     vec3 N = normalize(vec3(-s.nrm, 1.0));
     // shadow cast by the frame onto the lower surroundings
@@ -380,7 +408,12 @@ void main() {
     float vis2 = vis * (1.0 - 0.75 * inFrame);
     col = light(s, N, vis2);
     col *= mix(0.6, 1.0, smoothstep(b, b + 0.35, d));
+#endif
   }
+#endif
+#ifdef POST_SHADE
+  col = postShade(p, d, col, fw);
+#endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

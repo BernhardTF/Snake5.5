@@ -1,9 +1,9 @@
 import { h, icon, fmtInt, fmtDayShort } from '../dom';
 import { ICONS, type IconName } from '../icons';
-import { btn, screenHead, sectionTitle, segmented, skinDot } from '../widgets';
+import { btn, screenHead, sectionTitle, segmented, skinDot, tabs } from '../widgets';
 import type { Screen, ScreenCtx } from '../ctx';
 import { store, bestKey, todayKey } from '../../core/storage';
-import { BIOMES, BIOME_BY_ID } from '../../biomes/biomes';
+import { BIOMES, BIOME_BY_ID, type Realm } from '../../biomes/biomes';
 import { SKIN_BY_ID } from '../../skins/skins';
 import { isBiomeUnlocked, isSkinUnlocked, levelFromXp } from '../../game/progression';
 import type { BiomeId, GameModeId, MovementMode } from '../../types';
@@ -58,15 +58,18 @@ export function buildSetup(ctx: ScreenCtx): Screen {
   const dailyInfo = h('div', { class: 'daily-info' });
 
   // ---------------------------------------------------------------- biomes
+  let realm: Realm = BIOME_BY_ID[biome].realm;
   const track = h('div', { class: 'biome-track', role: 'radiogroup', 'aria-label': 'World' });
   const biomeCards = new Map<BiomeId, HTMLButtonElement>();
   for (const b of BIOMES) {
     const unlocked = isBiomeUnlocked(prof, b.id);
+    const beyond = b.realm === 'beyond';
     const card = h(
       'button',
       {
         type: 'button',
-        class: `card biome-card${unlocked ? '' : ' locked'}`,
+        class: `card biome-card${unlocked ? '' : ' locked'}${beyond ? ' realm-beyond' : ''}`,
+        'data-realm': b.realm,
         role: 'radio',
         'data-sfx': unlocked ? 'toggle' : 'back',
         'aria-disabled': unlocked ? undefined : 'true',
@@ -76,6 +79,7 @@ export function buildSetup(ctx: ScreenCtx): Screen {
       h(
         'span',
         { class: 'biome-art', style: { background: b.cardGradient } },
+        beyond ? h('span', { class: 'biome-stars', 'aria-hidden': 'true' }) : null,
         h('span', { class: `biome-local${b.localName.length > 9 ? ' long' : ''}` }, b.localName),
         unlocked ? null : h('span', { class: 'biome-lock' }, icon(ICONS.lock), h('span', null, `Reach level ${b.unlockLevel}`)),
       ),
@@ -118,6 +122,35 @@ export function buildSetup(ctx: ScreenCtx): Screen {
     carousel.classList.toggle('can-next', track.scrollLeft < max - 4);
   };
   track.addEventListener('scroll', updateArrows, { passive: true });
+
+  // ---------------------------------------------------------------- realm tabs
+  const realmCount = (r: Realm) => {
+    const list = BIOMES.filter((b) => b.realm === r);
+    return `${list.filter((b) => isBiomeUnlocked(prof, b.id)).length}/${list.length}`;
+  };
+  const centreOn = (c: HTMLElement | undefined, smooth: boolean) => {
+    const left = c ? Math.max(0, c.offsetLeft - (track.clientWidth - c.offsetWidth) / 2) : 0;
+    track.scrollTo({ left, behavior: smooth && !ctx.reducedMotion() ? 'smooth' : 'auto' });
+  };
+  const showRealm = (r: Realm) => {
+    realm = r;
+    for (const c of biomeCards.values()) c.hidden = c.dataset.realm !== r;
+    track.setAttribute('aria-label', r === 'earth' ? 'Worlds on Earth' : 'Worlds beyond Earth');
+    carousel.classList.toggle('realm-beyond', r === 'beyond');
+    const sel = biomeCards.get(biome);
+    centreOn(sel && !sel.hidden ? sel : undefined, false);
+    updateArrows();
+  };
+  const realmTabs = tabs<Realm>(
+    [
+      { value: 'earth', label: 'Earth', icon: 'globe', count: realmCount('earth') },
+      { value: 'beyond', label: 'Beyond Earth', icon: 'planet', count: realmCount('beyond'), cls: 'tab-beyond' },
+    ],
+    realm,
+    (r) => showRealm(r),
+    'Realm',
+    'seg-sm realm-tabs',
+  );
   addEventListener('resize', updateArrows);
 
   // ---------------------------------------------------------------- movement
@@ -138,11 +171,12 @@ export function buildSetup(ctx: ScreenCtx): Screen {
   );
 
   // ---------------------------------------------------------------- skin chip
-  const sk = SKIN_BY_ID[skin];
+  const sk = SKIN_BY_ID[skin] ?? SKIN_BY_ID.obsidian;
+  const kindLabel = sk.kind === 'legend' ? 'Legend' : 'Snake';
   const skinChip = btn(
-    { cls: 'chip skin-chip', title: `Snake: ${sk.name}. Change snake`, onClick: () => ctx.go('skins') },
+    { cls: `chip skin-chip${sk.kind === 'legend' ? ' is-legend' : ''}`, title: `${kindLabel}: ${sk.name}. Open the collection`, onClick: () => ctx.go('skins') },
     skinDot(sk),
-    h('span', { class: 'chip-body' }, h('span', { class: 'chip-sub' }, 'Snake'), h('span', { class: 'chip-top' }, sk.name)),
+    h('span', { class: 'chip-body' }, h('span', { class: 'chip-sub' }, kindLabel), h('span', { class: 'chip-top' }, sk.name)),
     h('span', { class: 'chip-caret' }, icon(ICONS.next)),
   );
 
@@ -207,12 +241,12 @@ export function buildSetup(ctx: ScreenCtx): Screen {
     'div',
     { class: 'setup-body stagger' },
     h('div', { class: 'panel setup-panel', style: { '--i': '0' } }, sectionTitle('Mode'), modeGrid, dailyInfo),
-    h('div', { class: 'panel setup-panel', style: { '--i': '1' } }, sectionTitle('World', h('span', { class: 'muted' }, `Level ${level}`)), carousel),
+    h('div', { class: 'panel setup-panel', style: { '--i': '1' } }, sectionTitle('World', h('span', { class: 'muted' }, `Level ${level}`)), h('div', { class: 'realm-row' }, realmTabs.el), carousel),
     h(
       'div',
       { class: 'panel setup-panel setup-move', style: { '--i': '2' } },
       h('div', { class: 'move-col' }, sectionTitle('Movement'), moveSeg, moveHint),
-      h('div', { class: 'skin-col' }, sectionTitle('Snake'), skinChip),
+      h('div', { class: 'skin-col' }, sectionTitle('Character'), skinChip),
     ),
   );
 
@@ -227,11 +261,9 @@ export function buildSetup(ctx: ScreenCtx): Screen {
 
   ctx.setAccent(biome);
   ctx.host.previewBiome(biome);
-  requestAnimationFrame(() => {
-    const c = biomeCards.get(biome);
-    if (c) track.scrollLeft = Math.max(0, c.offsetLeft - (track.clientWidth - c.offsetWidth) / 2);
-    updateArrows();
-  });
+  for (const c of biomeCards.values()) c.hidden = c.dataset.realm !== realm;
+  carousel.classList.toggle('realm-beyond', realm === 'beyond');
+  requestAnimationFrame(() => showRealm(realm));
 
   return {
     el,

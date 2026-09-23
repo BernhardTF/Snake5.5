@@ -1,8 +1,8 @@
 // Generative biome scores + the lookahead sequencer runtime that plays them.
 import type { BiomeId } from '../types';
 import { AmbienceBed } from './ambience';
-import { Rng, degToSemi, mulberry32, pick } from './dsp';
-import type { PluckKind, Synth } from './instruments';
+import { Rng, degToSemi, mtof as mtofHz, mulberry32, pick } from './dsp';
+import type { LeadKind, Synth } from './instruments';
 import { MotifMelody } from './melody';
 import type { Voice, VoiceTracker } from './voices';
 
@@ -26,7 +26,7 @@ export interface MusicHost {
 export interface BiomeKey {
   root: number;
   scale: number[];
-  lead: PluckKind | 'bell';
+  lead: LeadKind;
   /** Lead register for SFX (midi of degree 0). */
   sfxRoot: number;
   fifth: number;
@@ -38,6 +38,20 @@ export const BIOME_KEYS: Record<BiomeId, BiomeKey> = {
   lagoon: { root: 55, scale: [0, 2, 4, 7, 9], lead: 'slack', sfxRoot: 79, fifth: 3 },
   svartsandur: { root: 45, scale: [0, 2, 3, 5, 7, 8, 10], lead: 'bell', sfxRoot: 81, fifth: 4 },
   salar: { root: 57, scale: [0, 3, 5, 7, 10], lead: 'charango', sfxRoot: 81, fifth: 3 },
+  // C major calypso
+  pinksands: { root: 60, scale: [0, 2, 4, 5, 7, 9, 11], lead: 'pan', sfxRoot: 72, fifth: 4 },
+  // D dorian night
+  vaadhoo: { root: 50, scale: [0, 2, 3, 5, 7, 9, 10], lead: 'mallet', sfxRoot: 74, fifth: 4 },
+  // A tizita (minor) pentatonic
+  dallol: { root: 57, scale: [0, 2, 3, 7, 8], lead: 'krar', sfxRoot: 69, fifth: 3 },
+  // C lydian
+  luna: { root: 60, scale: [0, 2, 4, 6, 7, 9, 11], lead: 'theremin', sfxRoot: 72, fifth: 4 },
+  // E aeolian
+  mars: { root: 52, scale: [0, 2, 3, 5, 7, 8, 10], lead: 'analog', sfxRoot: 76, fifth: 4 },
+  // D phrygian, deep
+  titan: { root: 38, scale: [0, 1, 3, 5, 7, 8, 10], lead: 'sonar', sfxRoot: 62, fifth: 4 },
+  // A "rast"-like scale with quarter tones (neutral 3rd and 7th)
+  kepler: { root: 57, scale: [0, 2, 3.5, 5, 7, 9, 10.5], lead: 'crystal', sfxRoot: 81, fifth: 4 },
 };
 
 export abstract class Score {
@@ -330,6 +344,382 @@ class SalarScore extends Score {
   }
 }
 
+// ======================================================================= Pink Sands (Bahamas)
+
+/** light 16th swing */
+const sw16 = (st: number) => st + (st % 2 === 1 ? 0.14 : 0);
+
+class PinkSandsScore extends Score {
+  readonly bpm = 104;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[2, 2, 1, 3, 2, 2, 4], [3, 3, 2, 4, 4], [2, 1, 1, 2, 2, 4, 4], [4, 2, 2, 2, 2, 4], [1, 1, 2, 2, 2, 4, 4], [3, 1, 2, 2, 2, 2, 4], [3, 3, 2, 8]],
+    cadences: [[2, 2, 12], [3, 3, 10], [4, 4, 8]],
+    n: 7, fifth: 4, lo: -3, hi: 9, leap: 0.25,
+  });
+  /** I – IV – V7 – I (semitones above the root) */
+  private chords = [[0, 4, 7], [5, 9, 12], [7, 11, 14, 17], [0, 4, 7]];
+  resetPhrase() { this.mel.reset(); }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number, end?: boolean) {
+    const midi = this.m(deg, 1);
+    const roll = !end && len >= 8 && this.rng() < 0.4;
+    c.at(sw16(step), layer, (t, sd) => {
+      if (roll) {
+        // pan roll: fast repeated strikes sustain the note
+        const v = this.v(layer);
+        const reps = Math.min(12, Math.floor(len * 2));
+        for (let i = 0; i < reps; i++) this.s.steelPan(v, t + i * sd * 0.5, midi, sd * 1.2, vel * 0.2 * (i === 0 ? 1 : 0.62 - i * 0.02), { pan: -0.12 });
+      } else this.s.steelPan(this.v(layer), t, midi, Math.max(0.8, len * sd * 1.6), vel * 0.24, { pan: -0.12 });
+      if (end) this.s.steelPan(this.v(layer), t + 0.01, midi - 12, 1.6, vel * 0.12, { pan: 0.1 });
+    });
+  }
+  private strum(c: BarCtx, step: number, layer: Layer, notes: number[], vel: number, len: number) {
+    c.at(sw16(step), layer, (t, sd) => {
+      const v = this.v(layer);
+      notes.forEach((m, i) => this.s.pluck(v, t + i * 0.012, 'guitar', m, len * sd, vel * (1 - i * 0.1), { pan: 0.25 }));
+    });
+  }
+  bar(c: BarCtx) {
+    const pb = this.mel.barInPhrase;
+    const ch = this.chords[pb % 4];
+    const R = this.key.root;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel, nt.end);
+    // L0: warm sustained harmony under the surf
+    c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, ch.slice(0, 3).map((x) => R + x - 12), 16 * sd * 1.1, 0.022, { cutoff: 1000 }));
+    // L1: offbeat guitar chops (calypso skank)
+    const voicing = ch.map((x) => R + x);
+    for (const st of [2, 6, 10, 14]) this.strum(c, st, 1, voicing, 0.085, 1.3);
+    // L2: calypso bass, goombay drum, maracas
+    const b = R - 24 + ch[0];
+    const bass: [number, number, number][] = [[0, b, 0.42], [6, b + 7, 0.3], [8, b, 0.34], [12, b + 4, 0.26], [14, b + (pb === 3 ? -1 : 5), 0.2]];
+    for (const [st, m, vel] of bass) c.at(sw16(st), 2, (t, sd) => this.s.pluck(this.v(2), t, 'bassGtr', m, 2.2 * sd, vel, { pan: 0.05 }));
+    for (const [st, vel] of [[0, 0.3], [3, 0.2], [8, 0.26], [11, 0.2]] as const)
+      c.at(sw16(st), 2, (t) => this.s.membrane(this.v(2), t, 150, 112, 0.14, vel, 900, 0.3, -0.2));
+    for (const st of [4, 12]) c.at(st, 2, (t) => this.s.bendir(this.v(2), t, 'tak', 0.14, -0.25));
+    for (let st = 0; st < 16; st += 2) c.at(sw16(st + 1), 2, (t) => this.s.shaker(this.v(2), t, st % 4 === 2 ? 0.05 : 0.035, 0.05, 6000, 0.35));
+    // L3: soca cowbell, scraper, double-second pan comping
+    for (const st of [0, 3, 6, 10, 12]) c.at(st, 3, (t) => this.s.cowbell(this.v(3), t, 560, st === 0 ? 0.05 : 0.035, 0.06, 0.4));
+    for (const st of [4, 12]) c.at(st, 3, (t) => this.s.shaker(this.v(3), t, 0.045, 0.14, 3200, -0.4));
+    const arp = [ch[0], ch[1], ch[2], ch[1], ch[0] + 12, ch[2], ch[1]];
+    [2, 3, 6, 7, 10, 11, 14].forEach((st, i) => c.at(sw16(st), 3, (t) => this.s.steelPan(this.v(3), t, R + 12 + arp[i], 0.7, 0.05, { pan: 0.4 })));
+  }
+}
+
+// ======================================================================= Vaadhoo (Maldives)
+
+class VaadhooScore extends Score {
+  readonly bpm = 90;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[4, 4, 8], [3, 3, 2, 8], [2, 2, 4, 8], [6, 2, 8], [4, 2, 2, 4, 4], [8, 4, 4], [3, 3, 4, 6]],
+    cadences: [[4, 12], [2, 2, 12], [8, 8]],
+    n: 7, fifth: 4, lo: -2, hi: 9, leap: 0.25,
+  });
+  /** i – IV – i – VII (dorian) */
+  private chords = [[0, 3, 7, 10], [5, 9, 12, 14], [0, 3, 7, 10], [-2, 2, 5, 9]];
+  private starIn = 2;
+  resetPhrase() { this.mel.reset(); }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number, end?: boolean) {
+    const midi = this.m(deg, 1);
+    c.at(step, layer, (t, sd) => {
+      this.s.mallet(this.v(layer), t, midi, Math.max(1.6, len * sd * 1.6), vel * 0.3, { pan: -0.15 });
+      if (end) this.s.mallet(this.v(layer), t + 0.015, midi - 12, 2.5, vel * 0.16, { pan: 0.15 });
+    });
+  }
+  private dum(c: BarCtx, st: number, layer: Layer, vel: number) {
+    c.at(st, layer, (t) => this.s.membrane(this.v(layer), t, 96, 64, 0.2, vel, 500, 0.35, -0.1));
+  }
+  private tun(c: BarCtx, st: number, layer: Layer, vel: number, pan = 0.15) {
+    c.at(st, layer, (t) => this.s.membrane(this.v(layer), t, 190, 158, 0.09, vel, 1400, 0.4, pan));
+  }
+  bar(c: BarCtx) {
+    const pb = this.mel.barInPhrase;
+    const ch = this.chords[pb % 4];
+    const R = this.key.root;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel, nt.end);
+    // L0: night pads (2-bar, overlapping) + rare star glints
+    if (c.bar % 2 === 0) c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, ch.map((x) => R + x), 32 * sd * 1.15, 0.03, { cutoff: 720, sweep: 1.6 }));
+    if (--this.starIn <= 0) {
+      this.starIn = 2 + Math.floor(this.rng() * 3);
+      const st = Math.floor(this.rng() * 14);
+      c.at(st, 0, (t) => this.s.bell(this.v(0), t, R + 36 + pick(this.rng, ch), 3.5, 0.018, { glass: true, pan: this.rng() * 1.4 - 0.7 }));
+    }
+    // L1: the boduberu starts alone and soft: one deep stroke per bar
+    this.dum(c, 0, 1, 0.16);
+    // L2: groove (dum-tun-tak), soft bass
+    this.dum(c, 6, 2, 0.2);
+    this.dum(c, 8, 2, 0.14);
+    this.tun(c, 4, 2, 0.14);
+    this.tun(c, 12, 2, 0.16);
+    for (const st of [2, 10, 14]) c.at(st, 2, (t) => this.s.bendir(this.v(2), t, 'ghost', 0.2, 0.3));
+    for (const [st, x] of [[0, ch[0]], [8, ch[0]], [11, ch[1]]] as const)
+      c.at(st, 2, (t, sd) => this.s.tone(this.v(2), t, 'triangle', mtofHz(R - 12 + x), mtofHz(R - 12 + x), 3 * sd, 0.1, { lp: 380, attack: 0.01 }));
+    // L3: the drummers speed up: 16th rolls in a crescendo, claps, low chant hum
+    for (let st = 0; st < 16; st++) {
+      if (st % 4 === 0) continue;
+      const u = st / 16;
+      c.at(st, 3, (t) => this.s.bendir(this.v(3), t, st % 2 ? 'ghost' : 'tak', 0.07 + u * 0.1, st % 2 ? 0.35 : -0.35));
+    }
+    for (const st of [4, 12]) c.at(st, 3, (t) => this.s.clap(this.v(3), t, 0.07, 0.2));
+    if (c.bar % 2 === 1) c.at(0, 3, (t, sd) => this.s.choir(this.v(3), t, [R - 12 + ch[0], R - 5 + ch[0]], 30 * sd, 0.022, { from: [450, 800, 2830], to: [325, 700, 2530], pan: 0.1 }));
+  }
+}
+
+// ======================================================================= Dallol (Danakil)
+
+/** triplet-8th grid (12 per bar) → 16th steps */
+const T3 = (i: number) => (i * 4) / 3;
+const t3r = (r: number[]) => r.map((d) => (d * 4) / 3);
+
+class DallolScore extends Score {
+  readonly bpm = 76;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[3, 3, 6], [2, 1, 3, 6], [3, 2, 1, 6], [4, 2, 6], [2, 1, 2, 1, 6], [3, 3, 3, 3], [2, 1, 2, 1, 3, 3]].map(t3r),
+    cadences: [[2, 1, 9], [3, 3, 6], [6, 6]].map(t3r),
+    n: 5, fifth: 3, lo: -2, hi: 8, leap: 0.3,
+  });
+  private bubbleIn = 1;
+  resetPhrase() { this.mel.reset(); }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number, end?: boolean) {
+    const midi = this.m(deg);
+    const grace = !end && len >= 4 && this.rng() < 0.3 ? this.m(deg + 1) : 0;
+    c.at(step, layer, (t, sd) => {
+      if (grace) this.s.pluck(this.v(layer), t - 0.045, 'krar', grace, 0.08, vel * 0.3, { pan: -0.15 });
+      this.s.pluck(this.v(layer), t, 'krar', midi, len * sd * 1.5, vel * 0.7, { pan: -0.15 });
+      if (end) this.s.pluck(this.v(layer), t + 0.01, 'krar', midi - 12, len * sd * 1.5, vel * 0.3, { pan: 0.1 });
+    });
+  }
+  bar(c: BarCtx) {
+    const pb = this.mel.barInPhrase;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel, nt.end);
+    // L0: bowed drone on the tonic + fifth, brine bubbles
+    if (c.bar % 2 === 0) {
+      c.at(0, 0, (t, sd) => {
+        this.s.drone(this.v(0), t, this.key.root - 12, 32 * sd * 1.4, 0.04, { bright: 0.8, pan: -0.15 });
+        this.s.drone(this.v(0), t + 0.4, this.key.root - 5, 32 * sd * 1.35, 0.02, { bright: 0.6, pan: 0.2 });
+      });
+    }
+    if (--this.bubbleIn <= 0) {
+      this.bubbleIn = 1 + Math.floor(this.rng() * 3);
+      const st = Math.floor(this.rng() * 12);
+      const n = 2 + Math.floor(this.rng() * 3);
+      const p = this.rng() * 1.2 - 0.6;
+      c.at(st, 0, (t) => {
+        for (let i = 0; i < n; i++) {
+          const f = 380 + this.rng() * 500;
+          this.s.tone(this.v(0), t + i * (0.07 + this.rng() * 0.06), 'sine', f, f * 2.2, 0.06, 0.018, { glide: 0.02, pan: p });
+        }
+      });
+    }
+    // L1: low krar tonic on the downbeat
+    c.at(0, 1, (t, sd) => this.s.pluck(this.v(1), t, 'krar', this.m(0, -1), 10 * sd, 0.22, { pan: 0.2 }));
+    // L2: kebero (dum / slap) in chik-chika 12/8, krar ostinato, eskista claps
+    for (const [i, f0, vel] of [[0, 92, 0.34], [6, 92, 0.28], [8, 110, 0.14]] as const)
+      c.at(T3(i), 2, (t) => this.s.membrane(this.v(2), t, f0, 58, 0.22, vel, 500, 0.3));
+    for (const i of [3, 9]) c.at(T3(i), 2, (t) => this.s.bendir(this.v(2), t, 'tak', 0.2, 0.2));
+    const ost = pb % 2 === 0 ? [0, 2, 1, 3, 2, 1, 0, 2] : [0, 2, 1, 3, 4, 3, 1, 2];
+    [0, 2, 3, 5, 6, 8, 9, 11].forEach((i, k) => c.at(T3(i), 2, (t, sd) => this.s.pluck(this.v(2), t, 'krar', this.m(ost[k], -1), 3 * sd, k % 2 ? 0.14 : 0.2, { pan: 0.3 })));
+    for (const i of [3, 9]) c.at(T3(i), 2, (t) => this.s.clap(this.v(2), t, 0.05, -0.3));
+    // L3: washint counter-line, triplet shaker, kebero ghosts
+    const w = [4, 3, 2, 3][pb] ?? 4;
+    c.at(T3(1), 3, (t, sd) => this.s.flute(this.v(3), t, 'washint', this.m(w, 1), 13 * sd, 0.045, { pan: 0.4, scoop: true, fall: pb === 3 }));
+    for (let i = 0; i < 12; i++) c.at(T3(i), 3, (t) => this.s.shaker(this.v(3), t, i % 3 === 0 ? 0.045 : 0.028, 0.04, 5500, -0.35));
+    for (const i of [1, 4, 7, 10]) c.at(T3(i), 3, (t) => this.s.bendir(this.v(3), t, 'ghost', 0.2, -0.1));
+  }
+}
+
+// ======================================================================= Luna (the Moon)
+
+class LunaScore extends Score {
+  readonly bpm = 58;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[8, 8], [4, 4, 8], [12, 4], [-4, 4, 8], [6, 2, 8], [16], [8, -4, 4]],
+    cadences: [[4, 12], [16], [8, 8]],
+    n: 7, fifth: 4, lo: -1, hi: 9, leap: 0.3, breath: true,
+  });
+  /** Cmaj7 – D – Am7 – G/B (lydian colour) */
+  private chords = [[0, 4, 7, 11], [2, 6, 9, 14], [-3, 0, 4, 7], [-1, 2, 7, 11]];
+  private last = 0;
+  private radioIn = 2;
+  resetPhrase() { this.mel.reset(); this.last = 0; }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number) {
+    const midi = this.m(deg);
+    const from = this.last && Math.abs(this.last - midi) <= 7 && this.rng() < 0.65 ? this.last : 0;
+    this.last = midi;
+    c.at(step, layer, (t, sd) => this.s.theremin(this.v(layer), t, midi, Math.max(0.6, len * sd * 1.02), vel * 0.085, { from, pan: -0.1 }));
+  }
+  outro(c: BarCtx) { this.last = 0; super.outro(c); }
+  bar(c: BarCtx) {
+    const ch = this.chords[Math.floor(c.bar / 2) % 4];
+    const R = this.key.root;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel);
+    // L0: pure sine-ish bed + radio (quindar tones, telemetry blips)
+    if (c.bar % 2 === 0) c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, [R - 24 + ch[0], R - 12 + ch[1], R - 12 + ch[2]], 32 * sd * 1.2, 0.028, { cutoff: 420 }));
+    if (--this.radioIn <= 0) {
+      this.radioIn = 2 + Math.floor(this.rng() * 3);
+      const st = Math.floor(this.rng() * 10);
+      const p = this.rng() < 0.5 ? -0.55 : 0.55;
+      if (this.rng() < 0.5) {
+        c.at(st, 0, (t) => this.s.tone(this.v(0), t, 'sine', 2525, 2525, 0.25, 0.01, { pan: p, attack: 0.004 }));
+        c.at(st + 5, 0, (t) => this.s.tone(this.v(0), t, 'sine', 2475, 2475, 0.25, 0.009, { pan: p, attack: 0.004 }));
+      } else {
+        const n = 3 + Math.floor(this.rng() * 4);
+        const base = 1300 + Math.floor(this.rng() * 3) * 200;
+        c.at(st, 0, (t) => {
+          for (let i = 0; i < n; i++) this.s.tone(this.v(0), t + i * 0.09, 'sine', base * (i % 2 ? 1.25 : 1), base * (i % 2 ? 1.25 : 1), 0.045, 0.008, { pan: p });
+          this.s.whoosh(this.v(0), t - 0.05, 0.35, 0.012, 2600, 1800, 0.7, { pan: p });
+        });
+      }
+    }
+    // L2: slow sine arpeggio, soft sub pulse
+    [0, 4, 8, 12].forEach((st, i) => c.at(st, 2, (t) => {
+      const f = mtofHz(R + ch[i % ch.length]);
+      this.s.tone(this.v(2), t, 'sine', f, f, 1.4, 0.035, { attack: 0.01, pan: i % 2 ? 0.45 : -0.45 });
+    }));
+    c.at(0, 2, (t) => this.s.membrane(this.v(2), t, 52, 40, 0.5, 0.18, 120, 0));
+    // L3: glass bells from far away, octave sine echo
+    for (const st of [2, 10]) c.at(st, 3, (t) => this.s.bell(this.v(3), t, R + 24 + pick(this.rng, ch), 3, 0.022, { glass: true, pan: st < 8 ? -0.6 : 0.6 }));
+    [2, 6, 10, 14].forEach((st, i) => c.at(st, 3, (t) => {
+      const f = mtofHz(R + 12 + ch[(i + 2) % ch.length]);
+      this.s.tone(this.v(3), t, 'sine', f, f, 0.8, 0.018, { attack: 0.01, pan: i % 2 ? -0.3 : 0.3 });
+    }));
+  }
+}
+
+// ======================================================================= Mars (Jezero)
+
+class MarsScore extends Score {
+  readonly bpm = 100;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[4, 4, 8], [2, 2, 4, 8], [6, 2, 8], [4, 2, 2, 8], [3, 3, 2, 8], [8, 4, 4], [4, 4, 4, 4]],
+    cadences: [[4, 12], [2, 2, 12], [8, 8]],
+    n: 7, fifth: 4, lo: -2, hi: 9, leap: 0.25,
+  });
+  /** Em – C – Am – B (harmonic V) */
+  private chords = [[0, 3, 7], [-4, 0, 3], [5, 8, 12], [7, 11, 14]];
+  private last = 0;
+  resetPhrase() { this.mel.reset(); this.last = 0; }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number) {
+    const midi = this.m(deg, 1);
+    const from = this.last && Math.abs(this.last - midi) <= 5 && this.rng() < 0.4 ? this.last : 0;
+    this.last = midi;
+    c.at(step, layer, (t, sd) => this.s.analog(this.v(layer), t, midi, Math.max(0.2, len * sd * 0.95), vel * 0.06,
+      { cutoff: 1300, env: 2.2, q: 2, decay: len * sd * 0.6, from, pan: -0.1 }));
+  }
+  bar(c: BarCtx) {
+    const pb = this.mel.barInPhrase;
+    const ch = this.chords[pb % 4];
+    const R = this.key.root;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel);
+    // L0: slow-sweep analog pad
+    c.at(0, 0, (t, sd) => this.s.pad(this.v(0), t, ch.map((x) => R + x), 16 * sd * 1.12, 0.036, { cutoff: 650, sweep: 2.4, q: 2.5 }));
+    // L2: 16th arpeggio (ping-pong) + pulsing bass
+    const up = [ch[0], ch[1], ch[2], ch[0] + 12, ch[1] + 12, ch[0] + 12, ch[2], ch[1]];
+    for (let st = 0; st < 16; st++) {
+      const m = R + 12 + up[st % 8];
+      c.at(st, 2, (t, sd) => this.s.analog(this.v(2), t, m, sd * 0.8, st % 4 === 0 ? 0.05 : 0.036, { cutoff: 700, env: 5, q: 5, decay: 0.09, pan: st % 2 ? 0.4 : -0.4 }));
+    }
+    for (let st = 0; st < 16; st += 2) c.at(st, 2, (t, sd) => this.s.analog(this.v(2), t, R - 12 + ch[0] + (st === 6 || st === 14 ? 12 : 0), sd * 1.6, 0.075, { cutoff: 260, env: 3, q: 3, decay: 0.12, sub: true }));
+    // L3: gated 80s drum machine + high arp echo
+    for (const st of [0, 8, 10]) c.at(st, 3, (t) => this.s.membrane(this.v(3), t, 64, 42, 0.16, st === 10 ? 0.18 : 0.3, 180, 0.1));
+    for (const st of [4, 12]) c.at(st, 3, (t) => { this.s.membrane(this.v(3), t, 190, 160, 0.07, 0.1, 3000, 0.9); this.s.shaker(this.v(3), t, 0.06, 0.1, 1500); });
+    for (let st = 2; st < 16; st += 4) c.at(st, 3, (t) => this.s.shaker(this.v(3), t, 0.028, 0.03, 8000, 0.3));
+    for (let st = 3; st < 16; st += 4) c.at(st, 3, (t, sd) => this.s.analog(this.v(3), t, R + 24 + up[(st + 3) % 8], sd * 0.7, 0.022, { cutoff: 1500, env: 3, q: 3, decay: 0.07, pan: 0.6 }));
+  }
+}
+
+// ======================================================================= Titan (Shangri-La)
+
+class TitanScore extends Score {
+  readonly bpm = 50;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[8, 8], [4, 4, 8], [12, 4], [-4, 4, 8], [6, 2, 8], [16]],
+    cadences: [[4, 12], [16], [8, 8]],
+    n: 7, fifth: 4, lo: 0, hi: 10, leap: 0.3, breath: true,
+  });
+  /** i – bII – bVII – i, two bars each */
+  private chords = [[0, 7, 12, 15], [1, 8, 13, 17], [-2, 5, 10, 14], [0, 7, 12, 15]];
+  private thunderIn = 2;
+  resetPhrase() { this.mel.reset(); }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number, end?: boolean) {
+    const midi = this.m(deg, 2);
+    c.at(step, layer, (t, sd) => {
+      this.s.sonar(this.v(layer), t, midi, Math.max(2.2, len * sd * 1.3), vel * 0.2, { pan: -0.2 + this.rng() * 0.4 });
+      if (end) this.s.sonar(this.v(layer), t + 0.03, midi - 12, 4, vel * 0.12);
+    });
+  }
+  bar(c: BarCtx) {
+    const ch = this.chords[Math.floor(c.bar / 2) % 4];
+    const R = this.key.root;
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel, nt.end);
+    // L0: submerged drones + distant thunder
+    if (c.bar % 2 === 0) {
+      c.at(0, 0, (t, sd) => {
+        const d = 32 * sd * 1.4;
+        this.s.drone(this.v(0), t, R + ch[0], d, 0.05, { bright: 0.45, pan: -0.2 });
+        this.s.drone(this.v(0), t + 0.8, R + ch[1], d, 0.03, { bright: 0.5, pan: 0.2 });
+      });
+    }
+    if (--this.thunderIn <= 0) {
+      this.thunderIn = 3 + Math.floor(this.rng() * 3);
+      const st = Math.floor(this.rng() * 12);
+      c.at(st, 0, (t) => this.s.thunder(this.v(0), t, 4 + this.rng() * 3, 0.16 + this.rng() * 0.08, this.rng() * 1.4 - 0.7));
+    }
+    // L2: slow heartbeat + low filtered pad
+    c.at(0, 2, (t) => this.s.membrane(this.v(2), t, 50, 34, 0.4, 0.3, 120, 0.15));
+    c.at(3, 2, (t) => this.s.membrane(this.v(2), t, 47, 34, 0.35, 0.18, 120, 0.1));
+    if (c.bar % 2 === 1) c.at(0, 2, (t, sd) => this.s.pad(this.v(2), t, [R + 12 + ch[0], R + 12 + ch[2], R + 12 + ch[3]], 30 * sd, 0.034, { cutoff: 460 }));
+    // L3: high ghostly drone + muffled pings
+    if (c.bar % 2 === 0) c.at(4, 3, (t, sd) => this.s.drone(this.v(3), t, R + 24 + ch[3], 26 * sd, 0.03, { bright: 1.1 }));
+    for (const st of [6, 13]) c.at(st, 3, (t) => this.s.sonar(this.v(3), t, R + 36 + pick(this.rng, ch), 2.5, 0.035, { pan: st < 8 ? 0.55 : -0.55 }));
+  }
+}
+
+// ======================================================================= Kepler-186f ("Veyra")
+
+class KeplerScore extends Score {
+  readonly bpm = 76;
+  private mel = new MotifMelody(this.rng, {
+    rhythms: [[4, 4, 8], [2, 2, 4, 8], [3, 3, 2, 8], [6, 2, 8], [4, 2, 2, 4, 4], [2, 2, 2, 2, 8]],
+    cadences: [[4, 12], [2, 2, 12], [4, 4, 8]],
+    n: 7, fifth: 4, lo: -2, hi: 9, leap: 0.3,
+  });
+  /** chords as scale degrees (the scale itself carries the quarter tones) */
+  private chords = [[0, 2, 4], [-2, 0, 2], [3, 5, 7], [1, 3, 5]];
+  resetPhrase() { this.mel.reset(); }
+  lead(c: BarCtx, step: number, layer: Layer, deg: number, len: number, vel: number, end?: boolean) {
+    const midi = this.m(deg, 1);
+    c.at(step, layer, (t, sd) => {
+      this.s.crystal(this.v(layer), t, midi, Math.max(1.6, len * sd * 1.5), vel * 0.13, { pan: -0.15 });
+      if (end) this.s.crystal(this.v(layer), t + 0.02, midi + 12.25, 2.2, vel * 0.04, { pan: 0.4 });
+    });
+  }
+  bar(c: BarCtx) {
+    const pb = this.mel.barInPhrase;
+    const cd = this.chords[pb % 4];
+    const ch = cd.map((d) => this.m(d));
+    for (const nt of this.mel.next(c.sparse)) this.lead(c, nt.step, 1, nt.deg, nt.len, nt.vel, nt.end);
+    // L0: alien choir, vowel morphing (2-bar, alternating direction)
+    if (c.bar % 2 === 0) {
+      const flip = (c.bar / 2) % 2 === 1;
+      const I: [number, number, number] = [300, 2200, 3000], O: [number, number, number] = [480, 820, 2600];
+      c.at(0, 0, (t, sd) => this.s.choir(this.v(0), t, ch.map((m) => m - 12), 32 * sd * 1.12, 0.03, { from: flip ? O : I, to: flip ? I : O, vib: 9 }));
+    }
+    // L2: glassy arpeggio (ping-pong) + sine sub
+    const arp = [ch[0], ch[1], ch[2], ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12, ch[2]];
+    for (let st = 0; st < 16; st++) c.at(st, 2, (t) => this.s.crystal(this.v(2), t, arp[st % 8], 0.55, st % 4 === 0 ? 0.04 : 0.028, { pan: st % 2 ? 0.5 : -0.5 }));
+    for (const st of [0, 8]) c.at(st, 2, (t, sd) => { const f = mtofHz(ch[0] - 24); this.s.tone(this.v(2), t, 'sine', f, f, 7 * sd, 0.12, { attack: 0.02 }); });
+    // L3: microtonal bell clusters (quarter-tone neighbours), high choir, rising alien drops
+    for (const st of [4, 10, 14]) {
+      const m = pick(this.rng, ch) + 24 + (this.rng() < 0.5 ? 0.5 : -0.5);
+      c.at(st, 3, (t) => {
+        this.s.bell(this.v(3), t, m, 2.4, 0.03, { glass: true, pan: this.rng() * 1.2 - 0.6 });
+        this.s.bell(this.v(3), t + 0.07, m + 0.5, 2, 0.016, { glass: true, pan: this.rng() * 1.2 - 0.6 });
+      });
+    }
+    if (c.bar % 2 === 1) c.at(0, 3, (t, sd) => this.s.choir(this.v(3), t, [ch[2] + 12], 28 * sd, 0.016, { from: [270, 2290, 3010], to: [300, 870, 2240], vib: 14, pan: 0.3 }));
+    for (const st of [6, 15]) c.at(st, 3, (t) => this.s.membrane(this.v(3), t, 180, 480, 0.12, 0.1, 2000, 0.1, st === 6 ? -0.4 : 0.4));
+  }
+}
+
 export function createScore(id: BiomeId, h: MusicHost, rt: ScoreRuntime, seed: number): Score {
   switch (id) {
     case 'karesansui': return new KyotoScore(id, h, rt, seed);
@@ -337,6 +727,14 @@ export function createScore(id: BiomeId, h: MusicHost, rt: ScoreRuntime, seed: n
     case 'lagoon': return new LagoonScore(id, h, rt, seed);
     case 'svartsandur': return new IcelandScore(id, h, rt, seed);
     case 'salar': return new SalarScore(id, h, rt, seed);
+    case 'pinksands': return new PinkSandsScore(id, h, rt, seed);
+    case 'vaadhoo': return new VaadhooScore(id, h, rt, seed);
+    case 'dallol': return new DallolScore(id, h, rt, seed);
+    case 'luna': return new LunaScore(id, h, rt, seed);
+    case 'mars': return new MarsScore(id, h, rt, seed);
+    case 'titan': return new TitanScore(id, h, rt, seed);
+    case 'kepler': return new KeplerScore(id, h, rt, seed);
+    default: return new KyotoScore(id, h, rt, seed);
   }
 }
 

@@ -71,7 +71,7 @@ export function buildTitle(ctx: ScreenCtx): Screen {
     h(
       'div',
       { class: 'title-tiles', style: { '--i': '1' } },
-      sec('Snakes', 'snake', 'skins'),
+      sec('Collection', 'snake', 'skins'),
       sec('Achievements', 'trophy', 'achievements'),
       sec('Records', 'records', 'records'),
       sec('Settings', 'settings', 'settings'),

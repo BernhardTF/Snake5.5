@@ -2,7 +2,12 @@
 import { KsParams, NoiseColor, Rng, clamp, ksGen, mtof, mulberry32, noiseGen, runGen } from './dsp';
 import type { Voice } from './voices';
 
-export type PluckKind = 'koto' | 'oud' | 'slack' | 'charango' | 'kotoBass';
+export type PluckKind = 'koto' | 'oud' | 'slack' | 'charango' | 'kotoBass' | 'krar' | 'guitar' | 'bassGtr';
+/** Oscillator-synth lead voices (no pre-render needed). */
+export type SynthLead = 'bell' | 'pan' | 'mallet' | 'theremin' | 'analog' | 'crystal' | 'sonar';
+export type LeadKind = PluckKind | SynthLead;
+const PLUCK_KINDS = new Set<string>(['koto', 'oud', 'slack', 'charango', 'kotoBass', 'krar', 'guitar', 'bassGtr']);
+export const isPluck = (k: LeadKind): k is PluckKind => PLUCK_KINDS.has(k);
 
 interface PluckDef { ks: KsParams; sr: number; stereo?: boolean }
 
@@ -26,6 +31,21 @@ const PLUCKS: Record<PluckKind, PluckDef> = {
   charango: {
     sr: 32000, stereo: true,
     ks: { t60: 1.6, bright: 0.85, damp: 0.12, pos: 0.1, len: 1.6, body: [[520, 1.4, 3], [2600, 2, 3]] },
+  },
+  // Ethiopian lyre: gut strings, bright attack, a little leather-buzz
+  krar: {
+    sr: 32000,
+    ks: { t60: 2.1, bright: 0.72, damp: 0.14, pos: 0.13, buzz: 0.18, len: 2.0, body: [[310, 1.2, 4], [1450, 1.8, 3], [3100, 2.2, 1.5]], lp: 7600 },
+  },
+  // calypso nylon/cuatro rhythm guitar
+  guitar: {
+    sr: 24000,
+    ks: { t60: 1.5, bright: 0.5, damp: 0.22, pos: 0.16, len: 1.5, body: [[210, 1.1, 4], [1250, 1.6, 2]], lp: 5600 },
+  },
+  // round electric bass
+  bassGtr: {
+    sr: 16000,
+    ks: { t60: 1.7, bright: 0.28, damp: 0.42, pos: 0.22, len: 1.6, body: [[95, 1, 3], [720, 1, -3]], lp: 1600 },
   },
 };
 
@@ -156,7 +176,7 @@ export class Synth {
 
   // ---------------------------------------------------------------- flutes
 
-  flute(v: Voice, t: number, kind: 'shakuhachi' | 'quena' | 'siku' | 'ney', midi: number, dur: number, vel: number,
+  flute(v: Voice, t: number, kind: 'shakuhachi' | 'quena' | 'siku' | 'ney' | 'washint', midi: number, dur: number, vel: number,
     o: { fall?: boolean; pan?: number; scoop?: boolean } = {}) {
     const f = mtof(midi) * this.rate();
     const cfg = {
@@ -164,6 +184,7 @@ export class Synth {
       quena: { tri: 0.3, h2: 0.12, breath: 0.28, bq: 2.2, att: 0.06, vib: 0.006, vr: 5.4 },
       siku: { tri: 0.12, h2: 0.03, breath: 0.7, bq: 1.3, att: 0.05, vib: 0.002, vr: 5 },
       ney: { tri: 0.22, h2: 0.06, breath: 0.6, bq: 1.4, att: 0.12, vib: 0.006, vr: 5.2 },
+      washint: { tri: 0.26, h2: 0.09, breath: 0.45, bq: 1.8, att: 0.05, vib: 0.009, vr: 6.1 },
     }[kind];
     const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
     const amp = v.gain(0);
@@ -283,10 +304,16 @@ export class Synth {
 
   // ---------------------------------------------------------------- pad
 
-  pad(v: Voice, t: number, midis: number[], dur: number, vel: number, o: { cutoff?: number } = {}) {
+  pad(v: Voice, t: number, midis: number[], dur: number, vel: number, o: { cutoff?: number; sweep?: number; q?: number; pan?: number } = {}) {
     const amp = v.gain(0);
-    amp.connect(v.out);
-    const lp = v.filter('lowpass', o.cutoff ?? 900, 0.8);
+    amp.connect(o.pan !== undefined ? this.panTo(v, o.pan) : v.out);
+    const cut = o.cutoff ?? 900;
+    const lp = v.filter('lowpass', cut, o.q ?? 0.8);
+    if (o.sweep) {
+      lp.frequency.setValueAtTime(cut, t);
+      lp.frequency.linearRampToValueAtTime(cut * o.sweep, t + dur * 0.55);
+      lp.frequency.linearRampToValueAtTime(cut, t + dur);
+    }
     lp.connect(amp);
     const att = Math.min(1.4, dur * 0.35);
     amp.gain.setValueAtTime(0, t);
@@ -430,5 +457,304 @@ export class Synth {
     } else os.connect(g);
     g.connect(dest);
     v.play(os, t, t + dur * 1.6 + 0.05);
+  }
+
+  // ---------------------------------------------------------------- lead dispatcher
+
+  /** Any lead voice (plucked or synthesised) at a comparable loudness. */
+  lead(v: Voice, t: number, kind: LeadKind, midi: number, dur: number, vel: number, o: { pan?: number; cents?: number } = {}) {
+    const m = midi + (o.cents ?? 0) / 100;
+    switch (kind) {
+      case 'bell': this.bell(v, t, m, Math.max(1.2, dur), vel * 0.45, { pan: o.pan }); break;
+      case 'pan': this.steelPan(v, t, m, Math.max(0.9, dur), vel * 0.5, { pan: o.pan }); break;
+      case 'mallet': this.mallet(v, t, m, Math.max(1.2, dur), vel * 0.5, { pan: o.pan }); break;
+      case 'theremin': this.theremin(v, t, m, Math.min(1.2, Math.max(0.5, dur)), vel * 0.3, { pan: o.pan }); break;
+      case 'analog': this.analog(v, t, m, Math.min(0.9, Math.max(0.35, dur)), vel * 0.36, { pan: o.pan, cutoff: 900, env: 5, q: 4 }); break;
+      case 'crystal': this.crystal(v, t, m, Math.max(1.4, dur), vel * 0.4, { pan: o.pan }); break;
+      case 'sonar': this.sonar(v, t, m, Math.max(1.4, dur), vel * 0.6, { pan: o.pan }); break;
+      default: this.pluck(v, t, kind, midi, dur, vel, o);
+    }
+  }
+
+  // ---------------------------------------------------------------- tuned percussion / synth voices
+
+  /** Steel pan: tuned fundamental + octave + twelfth, the octave blooming just after the strike. */
+  steelPan(v: Voice, t: number, midi: number, dur: number, vel: number, o: { pan?: number } = {}) {
+    const f = mtof(midi) * this.rate();
+    const nyq = this.ctx.sampleRate * 0.45;
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const out = v.gain(1);
+    out.connect(dest);
+    const parts: [number, number, number, number][] = [
+      // ratio, level, attack, decay tau
+      [1, 1, 0.003, dur * 0.3 + 0.05],
+      [2, 0.55, 0.025, dur * 0.2 + 0.03],
+      [3, 0.2, 0.004, dur * 0.09 + 0.02],
+      [4.02, 0.07, 0.002, 0.04],
+    ];
+    for (const [r, l, a, d] of parts) {
+      if (f * r > nyq) continue;
+      const os = v.osc('sine', f * r);
+      // tiny downward settle on strike (the "boing")
+      os.frequency.setValueAtTime(f * r * 1.012, t);
+      os.frequency.setTargetAtTime(f * r, t, 0.02);
+      const g = v.gain(0);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vel * l, t + a);
+      g.gain.setTargetAtTime(0, t + a, d);
+      os.connect(g).connect(out);
+      v.play(os, t, t + a + d * 7 + 0.05);
+    }
+    // stick transient
+    const n = v.buffer(this.noise('white'));
+    const bp = v.filter('bandpass', Math.min(9000, f * 5), 1.5);
+    const ng = v.gain(0);
+    ng.gain.setValueAtTime(vel * 0.35, t);
+    ng.gain.setTargetAtTime(0, t, 0.004);
+    n.connect(bp).connect(ng).connect(out);
+    v.play(n, t, t + 0.05, this.rng() * 2);
+  }
+
+  /** Soft vibraphone-like mallet with slow tremolo. */
+  mallet(v: Voice, t: number, midi: number, dur: number, vel: number, o: { pan?: number; trem?: number } = {}) {
+    const f = mtof(midi) * this.rate();
+    const nyq = this.ctx.sampleRate * 0.45;
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(1);
+    amp.connect(dest);
+    const tr = o.trem ?? 0.25;
+    if (tr > 0) {
+      const l = v.osc('sine', 4.6 + this.rng() * 0.6);
+      const lg = v.gain(tr);
+      l.connect(lg).connect(amp.gain);
+      amp.gain.value = 1 - tr * 0.5;
+      v.play(l, t, t + dur + 0.1);
+    }
+    const o1 = v.osc('sine', f);
+    const g1 = v.gain(0);
+    g1.gain.setValueAtTime(0, t);
+    g1.gain.linearRampToValueAtTime(vel, t + 0.004);
+    g1.gain.setTargetAtTime(0, t + 0.004, dur / 4);
+    o1.connect(g1).connect(amp);
+    v.play(o1, t, t + dur + 0.1);
+    if (f * 4 < nyq) {
+      const o2 = v.osc('sine', f * 4);
+      const g2 = v.gain(0);
+      g2.gain.setValueAtTime(vel * 0.22, t);
+      g2.gain.setTargetAtTime(0, t, 0.06);
+      o2.connect(g2).connect(amp);
+      v.play(o2, t, t + 0.5);
+    }
+  }
+
+  /** Theremin: sine + soft 2nd harmonic, delayed vibrato, optional portamento. */
+  theremin(v: Voice, t: number, midi: number, dur: number, vel: number, o: { pan?: number; from?: number } = {}) {
+    const f = mtof(midi) * this.rate();
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(0);
+    amp.connect(dest);
+    const att = Math.min(0.18, dur * 0.3);
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(vel, t + att);
+    amp.gain.setTargetAtTime(vel * 0.8, t + att, dur * 0.5 + 0.05);
+    amp.gain.setTargetAtTime(0, t + dur, 0.12);
+    const o1 = v.osc('sine', f);
+    const o2 = v.osc('sine', f * 2);
+    const g2 = v.gain(0.12);
+    o1.connect(amp); o2.connect(g2).connect(amp);
+    if (o.from) {
+      const f0 = mtof(o.from) * this.rate();
+      o1.frequency.setValueAtTime(f0, t); o1.frequency.setTargetAtTime(f, t, 0.07);
+      o2.frequency.setValueAtTime(f0 * 2, t); o2.frequency.setTargetAtTime(f * 2, t, 0.07);
+    }
+    const lfo = v.osc('sine', 5.6 + this.rng() * 0.6);
+    const lg = v.gain(0);
+    lg.gain.setValueAtTime(0, t);
+    lg.gain.linearRampToValueAtTime(f * 0.012, t + Math.min(0.8, dur * 0.6));
+    const lg2 = v.gain(2);
+    lfo.connect(lg); lg.connect(o1.frequency); lg.connect(lg2).connect(o2.frequency);
+    const stop = t + dur + 0.8;
+    v.play(o1, t, stop); v.play(o2, t, stop); v.play(lfo, t, stop);
+  }
+
+  /** Analog-style synth: detuned saws through an enveloped resonant lowpass. */
+  analog(v: Voice, t: number, midi: number, dur: number, vel: number,
+    o: { pan?: number; cutoff?: number; env?: number; q?: number; decay?: number; sub?: boolean; from?: number; square?: boolean } = {}) {
+    const f = mtof(midi) * this.rate();
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(0);
+    amp.connect(dest);
+    const cut = o.cutoff ?? 800;
+    const lp = v.filter('lowpass', cut, o.q ?? 3);
+    lp.connect(amp);
+    const peak = Math.min(12000, cut * (o.env ?? 4));
+    const dec = o.decay ?? Math.min(0.5, dur * 0.5);
+    lp.frequency.setValueAtTime(cut, t);
+    lp.frequency.linearRampToValueAtTime(peak, t + 0.006);
+    lp.frequency.setTargetAtTime(cut, t + 0.006, dec * 0.4);
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(vel, t + 0.006);
+    amp.gain.setTargetAtTime(vel * 0.6, t + 0.006, dec);
+    amp.gain.setTargetAtTime(0, t + dur, 0.06);
+    const stop = t + dur + 0.4;
+    for (const dt of [-8, 8]) {
+      const s = v.osc(o.square ? 'square' : 'sawtooth', f);
+      s.detune.value = dt;
+      if (o.from) { s.frequency.setValueAtTime(mtof(o.from) * this.rate(), t); s.frequency.setTargetAtTime(f, t, 0.05); }
+      const g = v.gain(0.5);
+      s.connect(g).connect(lp);
+      v.play(s, t, stop);
+    }
+    if (o.sub) {
+      const s = v.osc('square', f / 2);
+      const g = v.gain(0.35);
+      s.connect(g).connect(lp);
+      v.play(s, t, stop);
+    }
+  }
+
+  /** Crystal: glassy FM with a beating twin partial (shimmer). */
+  crystal(v: Voice, t: number, midi: number, dur: number, vel: number, o: { pan?: number } = {}) {
+    const nyq = this.ctx.sampleRate * 0.45;
+    let f = mtof(midi) * this.rate();
+    while (f > 4500) f /= 2;
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(0);
+    amp.connect(dest);
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(vel, t + 0.006);
+    amp.gain.setTargetAtTime(0, t + 0.006, dur / 4.5);
+    const car = v.osc('sine', f);
+    const twin = v.osc('sine', f * 1.0045);
+    const tg = v.gain(0.6);
+    const mod = v.osc('sine', Math.min(nyq, f * 3.01));
+    const mg = v.gain(0);
+    mg.gain.setValueAtTime(f * 0.9, t);
+    mg.gain.setTargetAtTime(f * 0.08, t, dur * 0.12 + 0.02);
+    mod.connect(mg); mg.connect(car.frequency); mg.connect(twin.frequency);
+    car.connect(amp); twin.connect(tg).connect(amp);
+    const stop = t + dur + 0.1;
+    v.play(car, t, stop); v.play(twin, t, stop); v.play(mod, t, stop);
+  }
+
+  /** Sonar: submerged sine ping, muffled, with a slow downward drift. */
+  sonar(v: Voice, t: number, midi: number, dur: number, vel: number, o: { pan?: number } = {}) {
+    const f = mtof(midi) * this.rate();
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(0);
+    amp.connect(dest);
+    const lp = v.filter('lowpass', Math.min(5000, f * 3), 0.9);
+    lp.connect(amp);
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(vel, t + 0.012);
+    amp.gain.setTargetAtTime(0, t + 0.012, dur / 4);
+    const stop = t + dur + 0.1;
+    for (const c of [-6, 6]) {
+      const s = v.osc('triangle', f);
+      s.detune.setValueAtTime(c, t);
+      s.detune.linearRampToValueAtTime(c - 25, t + dur);
+      const g = v.gain(0.5);
+      s.connect(g).connect(lp);
+      v.play(s, t, stop);
+    }
+    const w = v.osc('sine', 2.7);
+    const wg = v.gain(f * 0.004);
+    w.connect(wg);
+    v.play(w, t, stop);
+  }
+
+  /** Formant "choir": detuned saws per note through three vowel formants (morphing a→o or custom). */
+  choir(v: Voice, t: number, midis: number[], dur: number, vel: number,
+    o: { from?: [number, number, number]; to?: [number, number, number]; pan?: number; vib?: number } = {}) {
+    const dest = o.pan !== undefined ? this.panTo(v, o.pan) : v.out;
+    const amp = v.gain(0);
+    amp.connect(dest);
+    const att = Math.min(1.6, dur * 0.35);
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(vel, t + att);
+    amp.gain.setValueAtTime(vel, t + dur - att);
+    amp.gain.linearRampToValueAtTime(0, t + dur);
+    const A = o.from ?? [800, 1150, 2900];
+    const B = o.to ?? [450, 800, 2830];
+    const sum = v.gain(1 / Math.max(1, midis.length));
+    const fg = [1, 0.5, 0.18];
+    for (let k = 0; k < 3; k++) {
+      const bp = v.filter('bandpass', A[k], 6 + k * 3);
+      bp.frequency.setValueAtTime(A[k], t);
+      bp.frequency.linearRampToValueAtTime(B[k], t + dur * 0.9);
+      const g = v.gain(fg[k] * 3);
+      sum.connect(bp).connect(g).connect(amp);
+    }
+    const r = this.rate();
+    const vib = v.osc('sine', 4.8 + this.rng());
+    const vg = v.gain(o.vib ?? 6);
+    vib.connect(vg);
+    const stop = t + dur + 0.05;
+    midis.forEach((m, i) => {
+      const f = mtof(m) * r;
+      for (const c of [-9, 7]) {
+        const s = v.osc('sawtooth', f);
+        s.detune.value = c + i * 2;
+        vg.connect(s.detune);
+        s.connect(sum);
+        v.play(s, t, stop);
+      }
+    });
+    v.play(vib, t, stop);
+  }
+
+  /** Two-tone cowbell / agogo. */
+  cowbell(v: Voice, t: number, f: number, vel: number, decay = 0.09, pan = 0) {
+    const dest = pan ? this.panTo(v, pan) : v.out;
+    const bp = v.filter('bandpass', f * 1.3, 2.5);
+    const g = v.gain(0);
+    g.gain.setValueAtTime(vel, t);
+    g.gain.setTargetAtTime(0, t, decay);
+    bp.connect(g).connect(dest);
+    for (const r of [1, 1.48]) {
+      const o = v.osc('square', f * r);
+      o.connect(bp);
+      v.play(o, t, t + decay * 7);
+    }
+  }
+
+  /** Hand clap: a few quick noise taps then a short tail. */
+  clap(v: Voice, t: number, vel: number, pan = 0, f = 1400) {
+    const dest = pan ? this.panTo(v, pan) : v.out;
+    const n = v.buffer(this.noise('white'));
+    const bp = v.filter('bandpass', f, 1.2);
+    const g = v.gain(0);
+    g.gain.setValueAtTime(0, t);
+    for (let i = 0; i < 3; i++) {
+      const tt = t + i * 0.009;
+      g.gain.setValueAtTime(vel * (0.7 + i * 0.15), tt);
+      g.gain.setTargetAtTime(0, tt, 0.003);
+    }
+    g.gain.setValueAtTime(vel, t + 0.028);
+    g.gain.setTargetAtTime(0, t + 0.028, 0.035);
+    n.connect(bp).connect(g).connect(dest);
+    v.play(n, t, t + 0.3, this.rng() * 2);
+  }
+
+  /** Distant thunder: slow, muffled brown-noise rumble with a few swells. */
+  thunder(v: Voice, t: number, dur: number, vel: number, pan = 0) {
+    const dest = this.panTo(v, pan);
+    const n = v.buffer(this.noise('brown'), true);
+    const lp = v.filter('lowpass', 160, 0.7);
+    lp.frequency.setValueAtTime(260, t);
+    lp.frequency.setTargetAtTime(110, t + 0.4, dur * 0.4);
+    const g = v.gain(0);
+    g.gain.setValueAtTime(0, t);
+    let tt = t;
+    const swells = 2 + Math.floor(this.rng() * 3);
+    for (let i = 0; i < swells; i++) {
+      const a = vel * (i === 0 ? 1 : 0.35 + this.rng() * 0.5);
+      g.gain.setTargetAtTime(a, tt, 0.12 + this.rng() * 0.2);
+      tt += (dur / swells) * (0.6 + this.rng() * 0.5);
+      g.gain.setTargetAtTime(a * 0.25, tt - 0.3, 0.35);
+    }
+    g.gain.setTargetAtTime(0, Math.max(tt, t + dur * 0.7), dur * 0.18);
+    n.connect(lp).connect(g).connect(dest);
+    v.play(n, t, t + dur * 1.6 + 0.2, this.rng() * 2);
   }
 }

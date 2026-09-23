@@ -1,6 +1,7 @@
 // Soft contact shadows: render occluders (snake + props) top-down into a low-res RT.
 // R = sun-projected shadow (geometry sheared along the sun's ground projection by height)
 // G = ambient occlusion footprint (vertical projection, blurred wider).
+// B = second-sun shadow (twin-sun worlds only, LIGHT.sun2Dir; 0 elsewhere and the pass is skipped).
 // Objects with `userData.noShadow = true` (or invisible) are skipped.
 import * as THREE from 'three';
 import { LIGHT } from '../lighting';
@@ -8,6 +9,7 @@ import { FullscreenPass, makeRT, passMaterial } from '../fsq';
 
 const OCC_VERT = /* glsl */ `
 uniform vec3 uSun;
+uniform vec3 uSun2;
 uniform float uMode;
 varying float vH;
 void main() {
@@ -19,6 +21,7 @@ void main() {
   float h = max(wp.z, 0.0);
   vH = h;
   if (uMode < 0.5) wp.xy -= uSun.xy / max(uSun.z, 0.2) * h;
+  else if (uMode > 1.5) wp.xy -= uSun2.xy / max(uSun2.z, 0.2) * h;
   wp.z = 0.0;
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
@@ -28,6 +31,7 @@ uniform float uMode;
 varying float vH;
 void main() {
   if (uMode < 0.5) gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+  else if (uMode > 1.5) gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
   else gl_FragColor = vec4(0.0, clamp(1.15 - vH * 0.9, 0.0, 1.0), 0.0, 1.0);
 }
 `;
@@ -54,7 +58,32 @@ void main() {
 }
 `;
 
+// Same as BLUR_FRAG, plus the B channel (second-sun shadow) blurred with the R radius.
+const BLUR3_FRAG = /* glsl */ `
+varying vec2 vUv;
+uniform sampler2D uTex;
+uniform vec2 uDirR;
+uniform vec2 uDirG;
+void main() {
+  float w0 = 0.2270270270, w1 = 0.1945945946, w2 = 0.1216216216, w3 = 0.0540540541, w4 = 0.0162162162;
+  vec3 c0 = texture2D(uTex, vUv).rgb;
+  vec2 rb = c0.rb * w0;
+  float g = c0.g * w0;
+  rb += (texture2D(uTex, vUv + uDirR).rb + texture2D(uTex, vUv - uDirR).rb) * w1;
+  rb += (texture2D(uTex, vUv + uDirR * 2.0).rb + texture2D(uTex, vUv - uDirR * 2.0).rb) * w2;
+  rb += (texture2D(uTex, vUv + uDirR * 3.0).rb + texture2D(uTex, vUv - uDirR * 3.0).rb) * w3;
+  rb += (texture2D(uTex, vUv + uDirR * 4.0).rb + texture2D(uTex, vUv - uDirR * 4.0).rb) * w4;
+  g += (texture2D(uTex, vUv + uDirG).g + texture2D(uTex, vUv - uDirG).g) * w1;
+  g += (texture2D(uTex, vUv + uDirG * 2.0).g + texture2D(uTex, vUv - uDirG * 2.0).g) * w2;
+  g += (texture2D(uTex, vUv + uDirG * 3.0).g + texture2D(uTex, vUv - uDirG * 3.0).g) * w3;
+  g += (texture2D(uTex, vUv + uDirG * 4.0).g + texture2D(uTex, vUv - uDirG * 4.0).g) * w4;
+  gl_FragColor = vec4(rb.x, g, rb.y, 1.0);
+}
+`;
+
 export class ContactShadows {
+  /** Blur scale of the sun shadows (1 = default soft contact shadow; luna uses a crisp 0.3). */
+  softness = 1;
   private rtA: THREE.WebGLRenderTarget;
   private rtB: THREE.WebGLRenderTarget;
   private cam = new THREE.OrthographicCamera(0, 1, 1, 0, -100, 100);
@@ -76,13 +105,13 @@ export class ContactShadows {
   constructor() {
     this.occMat = new THREE.ShaderMaterial({
       vertexShader: OCC_VERT, fragmentShader: OCC_FRAG,
-      uniforms: { uSun: LIGHT.sunDir, uMode: { value: 0 } },
+      uniforms: { uSun: LIGHT.sunDir, uSun2: LIGHT.sun2Dir, uMode: { value: 0 } },
       blending: THREE.CustomBlending,
       blendEquation: THREE.MaxEquation,
       blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
       depthTest: false, depthWrite: false, side: THREE.DoubleSide,
     });
-    this.blurMat = passMaterial(BLUR_FRAG, {
+    this.blurMat = passMaterial(BLUR3_FRAG, {
       uTex: { value: null }, uDirR: { value: new THREE.Vector2() }, uDirG: { value: new THREE.Vector2() },
     });
     this.rtA = makeRT(4, 4, { type: THREE.UnsignedByteType });
@@ -125,7 +154,9 @@ export class ContactShadows {
     scene.background = null;
     scene.overrideMaterial = this.occMat;
     r.autoClear = false;
-    for (let mode = 0; mode < 2; mode++) {
+    const s2 = LIGHT.sun2Color.value;
+    const modes = s2.r + s2.g + s2.b > 1e-5 ? 3 : 2; // second-sun pass only on twin-sun worlds
+    for (let mode = 0; mode < modes; mode++) {
       this.occMat.uniforms.uMode.value = mode;
       r.render(scene, this.cam);
     }
@@ -136,7 +167,7 @@ export class ContactShadows {
     // blur (texel units)
     const w = this.rtA.width, h = this.rtA.height;
     const cellsPerTexel = this.region.z / w;
-    const rR = 0.07 / cellsPerTexel, rG = 0.16 / cellsPerTexel;
+    const rR = 0.07 * this.softness / cellsPerTexel, rG = 0.16 / cellsPerTexel;
     const u = this.blurMat.uniforms;
     u.uTex.value = this.rtA.texture;
     (u.uDirR.value as THREE.Vector2).set(rR / w, 0);

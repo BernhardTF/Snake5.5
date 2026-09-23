@@ -1,9 +1,10 @@
 // AudioCore: the whole audio graph on an injected (Offline)AudioContext.
 // AudioEngine wraps it for the live game; the self-test drives it on an OfflineAudioContext.
-import type { BiomeId, GameEvent } from '../types';
+import type { BiomeId, GameEvent, SkinId } from '../types';
 import type { UiSound } from './contract';
 import { ReverbParams, degToSemi, irGenerator, softClipCurve } from './dsp';
-import { PluckKind, Synth } from './instruments';
+import { PluckKind, Synth, isPluck } from './instruments';
+import { Legends } from './legends';
 import { BIOME_KEYS, MusicHost, ScoreRuntime } from './scores';
 import { Sfx, SfxHost } from './sfx';
 import { Slither } from './slither';
@@ -11,7 +12,7 @@ import { VoiceTracker } from './voices';
 
 export type Scene = 'menu' | 'game' | 'paused' | 'over';
 
-const REVERB: Record<BiomeId, ReverbParams & { musicSend: number; sfxSend: number }> = {
+const REVERB: Record<BiomeId, ReverbParams & { musicSend: number; sfxSend: number; maxLen?: number }> = {
   // temple garden: medium, bright, some wall reflections
   karesansui: { t60: 2.3, brightStart: 7000, brightEnd: 2600, predelay: 0.022, early: 0.7, width: 0.8, hp: 120, wet: 0.9, musicSend: 0.42, sfxSend: 0.18 },
   // wide and dry
@@ -22,6 +23,20 @@ const REVERB: Record<BiomeId, ReverbParams & { musicSend: number; sfxSend: numbe
   svartsandur: { t60: 5.2, brightStart: 6500, brightEnd: 1500, predelay: 0.045, early: 0.3, width: 1, hp: 320, wet: 1, musicSend: 0.6, sfxSend: 0.25 },
   // vast, bright
   salar: { t60: 3.6, brightStart: 11000, brightEnd: 5500, predelay: 0.06, early: 0.2, width: 1, hp: 220, wet: 0.85, musicSend: 0.36, sfxSend: 0.15 },
+  // open beach, bright and short
+  pinksands: { t60: 1.8, brightStart: 9000, brightEnd: 4500, predelay: 0.02, early: 0.2, width: 0.95, hp: 180, wet: 0.8, musicSend: 0.26, sfxSend: 0.12 },
+  // lush night over water
+  vaadhoo: { t60: 3.2, brightStart: 6000, brightEnd: 2200, predelay: 0.035, early: 0.2, width: 1, hp: 150, wet: 0.9, musicSend: 0.44, sfxSend: 0.2 },
+  // hard reflective salt terraces
+  dallol: { t60: 2.1, brightStart: 8000, brightEnd: 3000, predelay: 0.014, early: 0.85, width: 0.8, hp: 200, wet: 0.85, musicSend: 0.3, sfxSend: 0.15 },
+  // vast, dark-tailed space
+  luna: { t60: 7.5, brightStart: 8000, brightEnd: 2200, predelay: 0.09, early: 0.05, width: 1, hp: 260, wet: 1, musicSend: 0.72, sfxSend: 0.3, maxLen: 6 },
+  // 80s plate-ish hall
+  mars: { t60: 3.0, brightStart: 7500, brightEnd: 2000, predelay: 0.05, early: 0.35, width: 1, hp: 180, wet: 0.9, musicSend: 0.42, sfxSend: 0.18 },
+  // submerged: long, very dark, keeps the lows
+  titan: { t60: 5.5, brightStart: 2600, brightEnd: 600, predelay: 0.06, early: 0.4, width: 1, hp: 60, wet: 1, musicSend: 0.55, sfxSend: 0.25, maxLen: 5 },
+  // long shimmering bloom
+  kepler: { t60: 4.5, brightStart: 12000, brightEnd: 5000, predelay: 0.04, early: 0.2, width: 1, hp: 220, wet: 0.95, musicSend: 0.5, sfxSend: 0.22, maxLen: 4.5 },
 };
 
 /** Instruments + ranges pre-rendered per biome. */
@@ -31,6 +46,13 @@ const PREWARM: Record<BiomeId, [PluckKind, number, number][]> = {
   lagoon: [['slack', 31, 92]],
   svartsandur: [],
   salar: [['charango', 52, 84], ['slack', 40, 64]],
+  pinksands: [['guitar', 58, 79], ['bassGtr', 33, 52]],
+  vaadhoo: [],
+  dallol: [['krar', 33, 84]],
+  luna: [],
+  mars: [],
+  titan: [],
+  kepler: [],
 };
 
 type Job = () => boolean; // returns true when finished
@@ -64,6 +86,7 @@ export class AudioCore implements MusicHost, SfxHost {
   private runtimes: { rt: ScoreRuntime; disposeAt: number }[] = [];
   private sfx: Sfx;
   private slither: Slither;
+  private legends: Legends;
   private jobs: Job[] = [];
   private prepared = new Set<string>();
   private seed: number;
@@ -132,6 +155,7 @@ export class AudioCore implements MusicHost, SfxHost {
 
     this.sfx = new Sfx(this);
     this.slither = new Slither(this.synth, this.sfxIn);
+    this.legends = new Legends(this, (g) => this.queueGen(g));
   }
 
   now() { return this.ctx.currentTime; }
@@ -180,7 +204,8 @@ export class AudioCore implements MusicHost, SfxHost {
     const list: [PluckKind, number][] = [];
     const inScale = (m: number) => key.scale.includes((((m - key.root) % 12) + 12) % 12);
     for (const [kind, lo, hi] of PREWARM[b]) for (let m = lo; m <= hi; m++) if (inScale(m)) list.push([kind, m]);
-    if (key.lead !== 'bell') for (let d = 0; d < 12; d++) list.push([key.lead, key.sfxRoot + degToSemi(key.scale, d)]);
+    const lead = key.lead;
+    if (isPluck(lead)) for (let d = 0; d < 12; d++) list.push([lead, key.sfxRoot + degToSemi(key.scale, d)]);
     // SFX lead notes first, then the score's range
     list.reverse();
     for (const [k, m] of list) this.queueGen(this.synth.ksTask(k, m));
@@ -198,7 +223,7 @@ export class AudioCore implements MusicHost, SfxHost {
     if (this.revPending === b) return;
     this.revPending = b;
     const sr = this.ctx.sampleRate;
-    const len = Math.floor(Math.min(p.t60 * 1.1, 4) * sr);
+    const len = Math.floor(Math.min(p.t60 * 1.1, p.maxLen ?? 4) * sr);
     const data: [Float32Array, Float32Array] = [new Float32Array(len), new Float32Array(len)];
     const gen = irGenerator(sr, p, b.length * 101 + 7, data);
     this.queue(() => {
@@ -288,12 +313,22 @@ export class AudioCore implements MusicHost, SfxHost {
     this.applyMusicState();
   }
 
-  setSlither(speed: number, turnRate: number) { this.slither.set(speed, turnRate); }
+  setSlither(speed: number, turnRate: number) {
+    this.slither.set(speed, turnRate);
+    this.legends.set(speed, turnRate);
+  }
+
+  /** Snakes use the slither loop; Legends get their own locomotion loop + signature SFX. */
+  setCharacter(id: SkinId) {
+    this.legends.setCharacter(id);
+    this.applyMusicState();
+  }
+  get character() { return this.legends.id; }
 
   handleEvents(events: GameEvent[]) {
     if (!Array.isArray(events)) return;
     for (const e of events) {
-      try { this.sfx.handle(e); } catch (err) { this.errors++; if (this.errors < 10) console.warn('[audio] sfx error', err); }
+      try { this.sfx.handle(e); this.legends.handle(e); } catch (err) { this.errors++; if (this.errors < 10) console.warn('[audio] sfx error', err); }
     }
   }
 
@@ -335,13 +370,16 @@ export class AudioCore implements MusicHost, SfxHost {
     if (this.scene === 'paused') duck = 0.4;
     if (this.deathDuck) duck = Math.min(duck, this.scene === 'over' ? 0.7 : 0.2);
     this.musicDuck.gain.setTargetAtTime(duck, t, this.deathDuck && this.scene !== 'over' ? 0.08 : 0.6);
-    this.slither.setGate(this.scene === 'game' ? 1 : 0);
+    const g = this.scene === 'game' ? 1 : 0;
+    this.slither.setGate(this.legends.active ? 0 : g);
+    this.legends.setGate(g);
   }
 
   /** Scheduler tick: schedule notes up to now + lookahead. */
   tick(lookahead = 0.16) {
     const now = this.now();
     for (const r of this.runtimes) r.rt.pump(now, now + lookahead);
+    this.legends.tick(now, now + lookahead);
     for (let i = this.runtimes.length - 1; i >= 0; i--) {
       const r = this.runtimes[i];
       if (r.rt.stopped && now > r.disposeAt) { r.rt.dispose(); this.runtimes.splice(i, 1); }
@@ -368,7 +406,8 @@ export class AudioCore implements MusicHost, SfxHost {
       level: this.level(),
       musicVoices: this.musicVoices.count, sfxVoices: this.sfxVoices.count, stolen: this.sfxVoices.stolen,
       runtimes: this.runtimes.length, jobs: this.jobs.length, errors: this.errors + this.runtimes.reduce((a, r) => a + r.rt.errors, 0),
-      bpm: this.active?.bpm ?? 0, scene: this.scene, biome: this.biome, intensity: this.intensity,
+      bpm: this.active?.bpm ?? 0, scene: this.scene, biome: this.biome, intensity: this.intensity, character: this.legends.id,
+      legendVoices: this.legends.voiceCount,
     };
   }
 
@@ -376,6 +415,7 @@ export class AudioCore implements MusicHost, SfxHost {
     for (const r of this.runtimes) { r.rt.stop(this.now(), 0.05); r.rt.dispose(); }
     this.runtimes.length = 0;
     this.slither.dispose();
+    this.legends.dispose();
     try { this.master.disconnect(); } catch { /* */ }
   }
 }

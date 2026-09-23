@@ -2,7 +2,7 @@
 import type { BiomeId, GameEvent, PowerupKind } from '../types';
 import type { UiSound } from './contract';
 import { bi, degToSemi } from './dsp';
-import type { Synth } from './instruments';
+import { Synth, isPluck } from './instruments';
 import { BIOME_KEYS, BiomeKey } from './scores';
 import type { Voice, VoiceTracker } from './voices';
 
@@ -37,9 +37,7 @@ export class Sfx {
   /** Lead instrument note (biome timbre). */
   private lead(t: number, midi: number, dur: number, vel: number, ui = false, pan = 0) {
     const k = this.key;
-    const v = this.v(ui);
-    if (k.lead === 'bell') this.s.bell(v, t, midi, Math.max(1.2, dur), vel * 0.45, { pan });
-    else this.s.pluck(v, t, k.lead, midi, dur, vel, { pan, cents: this.rc(5) });
+    this.s.lead(this.v(ui), t, k.lead, midi, dur, vel, { pan, cents: this.rc(5) });
   }
 
   handle(e: GameEvent) {
@@ -122,7 +120,8 @@ export class Sfx {
         const k = this.key;
         const low = k.root - 12;
         if (k.lead === 'bell') s.bell(this.v(), t + 1.45, low + 12, 3.5, 0.12);
-        else s.pluck(this.v(), t + 1.45, k.lead === 'koto' ? 'kotoBass' : k.lead, low, 3, 0.35);
+        else if (isPluck(k.lead)) s.pluck(this.v(), t + 1.45, k.lead === 'koto' ? 'kotoBass' : k.lead, low, 3, 0.35);
+        else s.lead(this.v(), t + 1.45, k.lead, low + 12, 3, 0.4);
         this.h.onDeath();
         break;
       }
